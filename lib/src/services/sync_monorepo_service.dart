@@ -305,7 +305,7 @@ class SyncMonorepoService {
         );
 
         // 네트워크별 mixin 파일명을 조건부 템플릿으로 변환
-        // {{#has_openapi}}$newFileName{{ 디렉토리를 만들고 그 안에 has_openapi}} 파일 생성
+        // {{#has_openapi}}community_openapi_mixin.dart{{ 디렉토리를 만들고 그 안에 has_openapi}} 파일 생성
         String? conditionalDir;
         String finalFileName = newFileName;
 
@@ -321,6 +321,11 @@ class SyncMonorepoService {
             !newFileName.contains('{{#has_graphql}}')) {
           conditionalDir = '{{#has_graphql}}$newFileName{{';
           finalFileName = 'has_graphql}}';
+        }
+        
+        // conditionalDir에 실제 파일명이 들어가도록 문자열 보간 적용
+        if (conditionalDir != null) {
+          conditionalDir = conditionalDir.replaceAll('\$newFileName', newFileName);
         }
 
         // 파일 내용 변환 (파일 이동 전에 수행)
