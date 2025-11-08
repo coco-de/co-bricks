@@ -305,28 +305,28 @@ class SyncMonorepoService {
         );
 
         // 네트워크별 mixin 파일명을 조건부 템플릿으로 변환
-        // {{#has_openapi}} 디렉토리를 만들고 그 안에 실제 파일명을 가진 파일 생성
+        // {{#has_openapi}}$newFileName{{ 디렉토리를 만들고 그 안에 has_openapi}} 파일 생성
         String? conditionalDir;
         String finalFileName = newFileName;
-        
+
         if (newFileName.endsWith('_openapi_mixin.dart') &&
             !newFileName.contains('{{#has_openapi}}')) {
-          conditionalDir = '{{#has_openapi}}';
-          finalFileName = '$newFileName{{/has_openapi}}';
+          conditionalDir = '{{#has_openapi}}$newFileName{{';
+          finalFileName = 'has_openapi}}';
         } else if (newFileName.endsWith('_serverpod_mixin.dart') &&
             !newFileName.contains('{{#has_serverpod}}')) {
-          conditionalDir = '{{#has_serverpod}}';
-          finalFileName = '$newFileName{{/has_serverpod}}';
+          conditionalDir = '{{#has_serverpod}}$newFileName{{';
+          finalFileName = 'has_serverpod}}';
         } else if (newFileName.endsWith('_graphql_mixin.dart') &&
             !newFileName.contains('{{#has_graphql}}')) {
-          conditionalDir = '{{#has_graphql}}';
-          finalFileName = '$newFileName{{/has_graphql}}';
+          conditionalDir = '{{#has_graphql}}$newFileName{{';
+          finalFileName = 'has_graphql}}';
         }
 
         // 파일 내용 변환 (파일 이동 전에 수행)
         File? targetFile;
         String? convertedContent;
-        
+
         if (FileUtils.shouldProcessFile(entity)) {
           if (await FileUtils.isTextFile(entity) &&
               await FileUtils.isFileSizeValid(entity)) {
@@ -363,12 +363,14 @@ class SyncMonorepoService {
             final targetPath = conditionalDir != null
                 ? path.join(baseDir, conditionalDir, finalFileName)
                 : path.join(baseDir, finalFileName);
-            
+
             targetFile = File(targetPath);
 
             // 조건부 템플릿 디렉토리 생성
             if (conditionalDir != null) {
-              final conditionalDirPath = Directory(path.join(baseDir, conditionalDir));
+              final conditionalDirPath = Directory(
+                path.join(baseDir, conditionalDir),
+              );
               if (!conditionalDirPath.existsSync()) {
                 await conditionalDirPath.create(recursive: true);
               }
@@ -409,7 +411,9 @@ class SyncMonorepoService {
               convertedFiles++;
             }
           } catch (e) {
-            logger.warn('   ⚠️  Error writing converted content to ${entity.path}: $e');
+            logger.warn(
+              '   ⚠️  Error writing converted content to ${entity.path}: $e',
+            );
           }
         }
       }
@@ -609,7 +613,6 @@ class SyncMonorepoService {
         return '${indent}{{#has_graphql}}GraphQLClient get $getterName => $varName;{{/has_graphql}}';
       },
     );
-
 
     // 주석 변환
     // /// REST API를 통해 실제 백엔드와 통신
