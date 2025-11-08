@@ -8,6 +8,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
+### Creating Projects
+
+**Interactive mode (recommended)**:
+```bash
+dart run bin/co_bricks.dart create --type monorepo
+```
+
+**Non-interactive mode** (all options):
+```bash
+dart run bin/co_bricks.dart create --type monorepo --no-interactive \
+  --name good_teacher \
+  --project-shortcut gt \
+  --description "Good Teacher App" \
+  --organization laputa \
+  --tld im \
+  --org-tld im \
+  --github-org coco-de \
+  --github-repo good-teacher \
+  --github-visibility private \
+  --backend serverpod \
+  --admin-email tech@laputa.im \
+  --enable-admin \
+  --apple-developer-id tech@laputa.im \
+  --itc-team-id 127782534 \
+  --team-id Y7BR9G2CVC \
+  --cert-cn Laputa \
+  --cert-ou Production \
+  --cert-o "Laputa Inc." \
+  --cert-l Seoul \
+  --cert-st Mapo \
+  --cert-c KR
+  # random_project_id는 자동 생성됨
+```
+
 ### Running the CLI During Development
 
 **Recommended approach** - Use Makefile commands for immediate code reflection:

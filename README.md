@@ -118,6 +118,69 @@ $ co-bricks sync --type monorepo --project-dir /path/to/project
 > $ dart pub global activate --source path /path/to/co-bricks
 > ```
 
+### Monorepo 프로젝트 생성
+
+브릭을 사용하여 새로운 monorepo 프로젝트를 생성할 수 있습니다:
+
+#### Interactive 모드 (권장)
+
+```sh
+$ co-bricks create --type monorepo
+```
+
+사용자 친화적인 프롬프트가 표시되며 모든 설정값을 입력할 수 있습니다.
+
+#### Non-interactive 모드 (자동화)
+
+```sh
+$ co-bricks create --type monorepo --no-interactive \
+  --name good_teacher \
+  --project-shortcut gt \
+  --description "Good Teacher App" \
+  --organization laputa \
+  --tld im \
+  --org-tld im \
+  --github-org coco-de \
+  --github-repo good-teacher \
+  --github-visibility private \
+  --backend serverpod \
+  --admin-email tech@laputa.im \
+  --enable-admin \
+  --apple-developer-id tech@laputa.im \
+  --itc-team-id 127782534 \
+  --team-id Y7BR9G2CVC \
+  --cert-cn Laputa \
+  --cert-ou Production \
+  --cert-o "Laputa Inc." \
+  --cert-l Seoul \
+  --cert-st Mapo \
+  --cert-c KR
+  # random_project_id는 자동 생성됨
+```
+
+#### 생성된 프로젝트 구조
+
+프로젝트가 생성되면 다음과 같은 구조를 갖습니다:
+
+```
+good_teacher/
+├── .envrc                 # 프로젝트 설정 (위에서 입력한 모든 값 포함)
+├── Makefile              # 개발 편의 명령어
+├── app/                  # Flutter 앱
+├── backend/              # Serverpod 백엔드 (선택한 백엔드에 따라)
+├── packages/             # 공유 패키지
+└── ...
+```
+
+#### 다음 단계
+
+생성된 프로젝트에서:
+
+```sh
+$ cd good_teacher
+$ make start    # 의존성 설치, git 초기화, GitHub 저장소 생성
+```
+
 ### 기타 명령어
 
 ```sh
@@ -126,6 +189,9 @@ $ co-bricks --version
 
 # 사용법 도움말 표시
 $ co-bricks --help
+
+# create 명령어 도움말 표시 (모든 옵션 확인)
+$ co-bricks create --help
 
 # sync 명령어 도움말 표시
 $ co-bricks sync --help

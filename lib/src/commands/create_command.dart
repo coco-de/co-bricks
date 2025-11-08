@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:args/command_runner.dart';
 import 'package:mason/mason.dart' hide packageVersion;
@@ -14,8 +15,8 @@ class CreateCommand extends Command<int> {
   CreateCommand({
     required Logger logger,
     required MasonGenerator? generator,
-  })  : _logger = logger,
-        _generator = generator {
+  }) : _logger = logger,
+       _generator = generator {
     argParser
       ..addOption(
         'type',
@@ -30,6 +31,15 @@ class CreateCommand extends Command<int> {
         help: 'Project name (required in non-interactive mode)',
       )
       ..addOption(
+        'project-shortcut',
+        help: 'Project shortcut (2-3 characters)',
+      )
+      ..addOption(
+        'description',
+        abbr: 'd',
+        help: 'Project description',
+      )
+      ..addOption(
         'output-dir',
         abbr: 'o',
         help: 'Output directory for the generated project',
@@ -38,6 +48,16 @@ class CreateCommand extends Command<int> {
       ..addOption(
         'github-org',
         help: 'GitHub organization name',
+      )
+      ..addOption(
+        'github-repo',
+        help: 'GitHub repository name',
+      )
+      ..addOption(
+        'github-visibility',
+        help: 'GitHub repository visibility (private or public)',
+        allowed: ['private', 'public'],
+        defaultsTo: 'private',
       )
       ..addOption(
         'backend',
@@ -52,7 +72,57 @@ class CreateCommand extends Command<int> {
       ..addOption(
         'tld',
         help: 'Top-level domain (e.g., com, io, im)',
+        defaultsTo: 'im',
+      )
+      ..addOption(
+        'org-tld',
+        help: 'Organization top-level domain',
         defaultsTo: 'com',
+      )
+      ..addOption(
+        'admin-email',
+        help: 'Administrator email address',
+      )
+      ..addOption(
+        'apple-developer-id',
+        help: 'Apple Developer ID (email)',
+      )
+      ..addOption(
+        'itc-team-id',
+        help: 'App Store Connect Team ID',
+      )
+      ..addOption(
+        'team-id',
+        help: 'Developer Portal Team ID',
+      )
+      ..addOption(
+        'cert-cn',
+        help: 'Certificate Common Name',
+      )
+      ..addOption(
+        'cert-ou',
+        help: 'Certificate Organizational Unit',
+      )
+      ..addOption(
+        'cert-o',
+        help: 'Certificate Organization',
+      )
+      ..addOption(
+        'cert-l',
+        help: 'Certificate Locality/City',
+      )
+      ..addOption(
+        'cert-st',
+        help: 'Certificate State/Province',
+      )
+      ..addOption(
+        'cert-c',
+        help: 'Certificate Country (2-letter code)',
+      )
+      ..addFlag(
+        'enable-admin',
+        help: 'Enable admin functionality',
+        defaultsTo: true,
       )
       ..addFlag(
         'interactive',
@@ -123,21 +193,33 @@ class CreateCommand extends Command<int> {
       if (interactive) {
         projectName = _logger.prompt('Project name:');
       } else {
-        throw ArgumentError('Project name is required. Use --name flag or run in interactive mode.');
+        throw ArgumentError(
+          'Project name is required. Use --name flag or run in interactive mode.',
+        );
       }
     }
     vars['project_name'] = projectName;
 
-    // GitHub organization
-    String? githubOrg = argResults!['github-org'] as String?;
-    if (interactive && (githubOrg == null || githubOrg.isEmpty)) {
-      githubOrg = _logger.prompt(
-        'GitHub organization:',
-        defaultValue: projectName.toLowerCase().replaceAll('_', '-'),
+    // Project shortcut
+    String? projectShortcut = argResults!['project-shortcut'] as String?;
+    if (interactive && (projectShortcut == null || projectShortcut.isEmpty)) {
+      projectShortcut = _logger.prompt(
+        'Project shortcut (2-3 characters):',
+        defaultValue: projectName.substring(0, 2).toLowerCase(),
       );
     }
-    vars['github_org'] = githubOrg ?? projectName.toLowerCase().replaceAll('_', '-');
-    vars['github_repo'] = projectName.toLowerCase().replaceAll('_', '-');
+    vars['project_shortcut'] =
+        projectShortcut ?? projectName.substring(0, 2).toLowerCase();
+
+    // Description
+    String? description = argResults!['description'] as String?;
+    if (interactive && (description == null || description.isEmpty)) {
+      description = _logger.prompt(
+        'Project description:',
+        defaultValue: 'A new monorepo project',
+      );
+    }
+    vars['description'] = description ?? 'A new monorepo project';
 
     // Organization/Company name
     String? organization = argResults!['organization'] as String?;
@@ -155,7 +237,49 @@ class CreateCommand extends Command<int> {
       tld = _logger.prompt('Top-level domain:', defaultValue: tld);
     }
     vars['tld'] = tld;
-    vars['org_tld'] = 'com';
+
+    // Org TLD
+    String orgTld = argResults!['org-tld'] as String;
+    if (interactive) {
+      orgTld = _logger.prompt('Organization TLD:', defaultValue: orgTld);
+    }
+    vars['org_tld'] = orgTld;
+
+    // GitHub organization
+    String? githubOrg = argResults!['github-org'] as String?;
+    if (interactive && (githubOrg == null || githubOrg.isEmpty)) {
+      githubOrg = _logger.prompt(
+        'GitHub organization:',
+        defaultValue: projectName.toLowerCase().replaceAll('_', '-'),
+      );
+    }
+    vars['github_org'] =
+        githubOrg ?? projectName.toLowerCase().replaceAll('_', '-');
+
+    // GitHub repository
+    String? githubRepo = argResults!['github-repo'] as String?;
+    if (interactive && (githubRepo == null || githubRepo.isEmpty)) {
+      githubRepo = _logger.prompt(
+        'GitHub repository:',
+        defaultValue: projectName.toLowerCase().replaceAll('_', '-'),
+      );
+    }
+    vars['github_repo'] =
+        githubRepo ?? projectName.toLowerCase().replaceAll('_', '-');
+
+    // GitHub visibility
+    String githubVisibility = argResults!['github-visibility'] as String;
+    if (interactive) {
+      githubVisibility = _logger.chooseOne(
+        'GitHub repository visibility:',
+        choices: ['private', 'public'],
+        defaultValue: githubVisibility,
+      );
+    }
+    vars['github_visibility'] = githubVisibility;
+
+    // Random project ID (auto-generated)
+    vars['random_project_id'] = _generateRandomId();
 
     // Backend selection
     String backend = argResults!['backend'] as String;
@@ -174,32 +298,127 @@ class CreateCommand extends Command<int> {
     vars['has_supabase'] = backend == 'supabase';
     vars['has_firebase'] = backend == 'firebase';
 
-    // Default values for other required variables
-    vars['description'] = 'A new monorepo project';
-    vars['project_shortcut'] = projectName.substring(0, 2).toLowerCase();
-    vars['admin_email'] = 'dev@${projectName.toLowerCase()}.$tld';
-    vars['enable_admin'] = true;
+    // Admin email
+    String? adminEmail = argResults!['admin-email'] as String?;
+    if (interactive && (adminEmail == null || adminEmail.isEmpty)) {
+      adminEmail = _logger.prompt(
+        'Administrator email:',
+        defaultValue: 'dev@${projectName.toLowerCase()}.$tld',
+      );
+    }
+    vars['admin_email'] = adminEmail ?? 'dev@${projectName.toLowerCase()}.$tld';
 
-    // Certificate variables (optional)
-    vars['cert_cn'] = organization ?? _toTitleCase(projectName);
-    vars['cert_ou'] = 'Development';
-    vars['cert_o'] = organization ?? _toTitleCase(projectName);
-    vars['cert_l'] = 'Seoul';
-    vars['cert_st'] = 'Seoul';
-    vars['cert_c'] = 'KR';
+    // Enable admin
+    final enableAdmin = argResults!['enable-admin'] as bool;
+    vars['enable_admin'] = enableAdmin;
 
-    // Apple/iOS variables (can be filled later)
-    vars['apple_developer_id'] = '';
-    vars['itc_team_id'] = '';
-    vars['team_id'] = '';
+    // Apple Developer ID
+    String? appleDeveloperId = argResults!['apple-developer-id'] as String?;
+    if (interactive && (appleDeveloperId == null || appleDeveloperId.isEmpty)) {
+      appleDeveloperId = _logger.prompt(
+        'Apple Developer ID (email):',
+        defaultValue: '',
+      );
+    }
+    vars['apple_developer_id'] = appleDeveloperId ?? '';
+
+    // ITC Team ID
+    String? itcTeamId = argResults!['itc-team-id'] as String?;
+    if (interactive && (itcTeamId == null || itcTeamId.isEmpty)) {
+      itcTeamId = _logger.prompt(
+        'App Store Connect Team ID:',
+        defaultValue: '',
+      );
+    }
+    vars['itc_team_id'] = itcTeamId ?? '';
+
+    // Team ID
+    String? teamId = argResults!['team-id'] as String?;
+    if (interactive && (teamId == null || teamId.isEmpty)) {
+      teamId = _logger.prompt(
+        'Developer Portal Team ID:',
+        defaultValue: '',
+      );
+    }
+    vars['team_id'] = teamId ?? '';
+
+    // Certificate variables
+    String? certCn = argResults!['cert-cn'] as String?;
+    if (interactive && (certCn == null || certCn.isEmpty)) {
+      certCn = _logger.prompt(
+        'Certificate Common Name:',
+        defaultValue: organization ?? _toTitleCase(projectName),
+      );
+    }
+    vars['cert_cn'] = certCn ?? (organization ?? _toTitleCase(projectName));
+
+    String? certOu = argResults!['cert-ou'] as String?;
+    if (interactive && (certOu == null || certOu.isEmpty)) {
+      certOu = _logger.prompt(
+        'Certificate Organizational Unit:',
+        defaultValue: 'Production',
+      );
+    }
+    vars['cert_ou'] = certOu ?? 'Production';
+
+    String? certO = argResults!['cert-o'] as String?;
+    if (interactive && (certO == null || certO.isEmpty)) {
+      certO = _logger.prompt(
+        'Certificate Organization:',
+        defaultValue: organization ?? _toTitleCase(projectName),
+      );
+    }
+    vars['cert_o'] = certO ?? (organization ?? _toTitleCase(projectName));
+
+    String? certL = argResults!['cert-l'] as String?;
+    if (interactive && (certL == null || certL.isEmpty)) {
+      certL = _logger.prompt(
+        'Certificate Locality/City:',
+        defaultValue: 'Seoul',
+      );
+    }
+    vars['cert_l'] = certL ?? 'Seoul';
+
+    String? certSt = argResults!['cert-st'] as String?;
+    if (interactive && (certSt == null || certSt.isEmpty)) {
+      certSt = _logger.prompt(
+        'Certificate State/Province:',
+        defaultValue: 'Seoul',
+      );
+    }
+    vars['cert_st'] = certSt ?? 'Seoul';
+
+    String? certC = argResults!['cert-c'] as String?;
+    if (interactive && (certC == null || certC.isEmpty)) {
+      certC = _logger.prompt(
+        'Certificate Country Code (2 letters):',
+        defaultValue: 'KR',
+      );
+    }
+    vars['cert_c'] = certC ?? 'KR';
 
     return vars;
+  }
+
+  /// Generates a random 4-character ID using lowercase letters and numbers
+  String _generateRandomId() {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    final random = Random();
+    return String.fromCharCodes(
+      Iterable.generate(
+        4,
+        (_) => chars.codeUnitAt(random.nextInt(chars.length)),
+      ),
+    );
   }
 
   String _toTitleCase(String text) {
     return text
         .split('_')
-        .map((word) => word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1))
+        .map(
+          (word) =>
+              word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1),
+        )
         .join(' ');
   }
 }

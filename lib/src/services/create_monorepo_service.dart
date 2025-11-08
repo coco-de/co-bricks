@@ -12,8 +12,8 @@ class CreateMonorepoService {
   CreateMonorepoService({
     required Logger logger,
     MasonGenerator? generator,
-  })  : _logger = logger,
-        _generator = generator;
+  }) : _logger = logger,
+       _generator = generator;
 
   final Logger _logger;
   final MasonGenerator? _generator;
@@ -24,7 +24,9 @@ class CreateMonorepoService {
     required Directory outputDirectory,
   }) async {
     final projectName = variables['project_name'] as String;
-    final progress = _logger.progress('Creating monorepo project: $projectName');
+    final progress = _logger.progress(
+      'Creating monorepo project: $projectName',
+    );
 
     try {
       // Get brick path
@@ -86,7 +88,13 @@ class CreateMonorepoService {
     }
 
     // Check if we're inside template/co-bricks
-    final templateBrickPath = path.join(currentDir, '..', '..', 'bricks', 'monorepo');
+    final templateBrickPath = path.join(
+      currentDir,
+      '..',
+      '..',
+      'bricks',
+      'monorepo',
+    );
     if (Directory(templateBrickPath).existsSync()) {
       return path.normalize(templateBrickPath);
     }
@@ -113,26 +121,45 @@ class CreateMonorepoService {
     if (variables['has_supabase'] == true) backend = 'supabase';
     if (variables['has_firebase'] == true) backend = 'firebase';
 
-    final envrcContent = '''
+    final envrcContent =
+        '''
 # Project Configuration
 export PROJECT_NAME="${variables['project_name']}"
+export PROJECT_SHORTCUT="${variables['project_shortcut']}"
+export DESCRIPTION="${variables['description']}"
+
+# Organization Configuration
 export ORG_NAME="${variables['org_name']}"
-export TLD="${variables['tld']}"
 export ORG_TLD="${variables['org_tld']}"
+export TLD="${variables['tld']}"
+
+# GitHub Configuration
 export GITHUB_ORG="${variables['github_org']}"
 export GITHUB_REPO="${variables['github_repo']}"
+export GITHUB_VISIBILITY="${variables['github_visibility']}"
+
+# Backend Configuration
 export BACKEND="$backend"
 
-# Admin
-export ADMIN_EMAIL="${variables['admin_email']}"
+# Apple Developer Configuration
+export APPLE_DEVELOPER_ID="${variables['apple_developer_id']}"
+export ITC_TEAM_ID="${variables['itc_team_id']}"
+export TEAM_ID="${variables['team_id']}"
 
-# Certificate (for Android)
+# Admin Configuration
+export ADMIN_EMAIL="${variables['admin_email']}"
+export ENABLE_ADMIN="${variables['enable_admin']}"
+
+# Android Certificate Configuration
 export CERT_CN="${variables['cert_cn']}"
 export CERT_OU="${variables['cert_ou']}"
 export CERT_O="${variables['cert_o']}"
 export CERT_L="${variables['cert_l']}"
 export CERT_ST="${variables['cert_st']}"
 export CERT_C="${variables['cert_c']}"
+
+# Random Project ID
+export RANDOM_PROJECT_ID="${variables['random_project_id']}"
 ''';
 
     await envrcFile.writeAsString(envrcContent);
