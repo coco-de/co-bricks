@@ -136,17 +136,19 @@ class SyncMonorepoService {
     logger.info('${'=' * 60}');
   }
 
-  /// 네트워크별 브릭 동기화 (openapi, graphql, serverpod)
+  /// 네트워크/백엔드별 브릭 동기화 (openapi, graphql, serverpod, supabase, firebase)
   Future<void> _syncNetworkBricks(
     Directory templateDir,
     Directory bricksDir,
     ProjectConfig config,
   ) async {
-    // 네트워크 타입별 브릭 매핑
+    // 네트워크/백엔드 타입별 브릭 매핑
     final networkBricks = {
       'openapi': ['openapi', 'openapi_service'],
       'graphql': ['graphql', 'graphql_service'],
       'serverpod': ['serverpod', 'serverpod_service'],
+      'supabase': ['supabase', 'supabase_service'],
+      'firebase': ['firebase', 'firebase_service'],
     };
 
     for (final entry in networkBricks.entries) {
@@ -231,7 +233,7 @@ class SyncMonorepoService {
     // 디렉토리 복사
     await FileUtils.copyDirectory(sourceDir, targetDir, overwrite: true);
 
-    // package 디렉토리의 경우, 네트워크 브릭들은 별도 브릭으로 관리하므로 monorepo에서 제외
+    // package 디렉토리의 경우, 네트워크/백엔드 브릭들은 별도 브릭으로 관리하므로 monorepo에서 제외
     if (dirName == 'package') {
       final networkBricks = [
         'openapi',
@@ -240,6 +242,10 @@ class SyncMonorepoService {
         'graphql_service',
         'serverpod',
         'serverpod_service',
+        'supabase',
+        'supabase_service',
+        'firebase',
+        'firebase_service',
       ];
 
       for (final brickName in networkBricks) {
@@ -265,12 +271,45 @@ class SyncMonorepoService {
     // 디렉토리 이름 변환 (하위에서 상위로)
     await _convertDirectoryNames(targetDir, config, renamedDirs);
 
+    // 기존 네트워크별 mixin 파일 정리 (조건부 디렉토리 생성 전)
+    await _cleanupNetworkMixinFiles(targetDir);
+
     // 파일 처리
     final stats = await _processFiles(targetDir, config, patterns);
     convertedFiles = stats['converted'] as int;
 
     logger.info('   ✅ $dirName synced:');
     logger.info('      • $convertedFiles files converted');
+  }
+
+  /// 네트워크별 mixin 파일 정리 (조건부 디렉토리 생성 전)
+  /// brick에 이미 존재하는 네트워크/백엔드별 mixin 파일들을 삭제
+  Future<void> _cleanupNetworkMixinFiles(Directory dir) async {
+    final mixinPatterns = [
+      '_openapi_mixin.dart',
+      '_serverpod_mixin.dart',
+      '_graphql_mixin.dart',
+      '_supabase_mixin.dart',
+      '_firebase_mixin.dart',
+    ];
+
+    await for (final entity in dir.list(recursive: true)) {
+      if (entity is File) {
+        final fileName = path.basename(entity.path);
+
+        // 네트워크별 mixin 파일인지 확인
+        final isNetworkMixin = mixinPatterns.any((pattern) => fileName.endsWith(pattern));
+
+        if (isNetworkMixin) {
+          try {
+            await entity.delete();
+            logger.info('   🗑️  Cleaning up old mixin file: $fileName');
+          } catch (e) {
+            logger.warn('   ⚠️  Could not delete old mixin file $fileName: $e');
+          }
+        }
+      }
+    }
   }
 
   /// 디렉토리 이름 변환
@@ -355,6 +394,14 @@ class SyncMonorepoService {
             !newFileName.contains('{{#has_graphql}}')) {
           conditionalDir = '{{#has_graphql}}$newFileName{{';
           finalFileName = 'has_graphql}}';
+        } else if (newFileName.endsWith('_supabase_mixin.dart') &&
+            !newFileName.contains('{{#has_supabase}}')) {
+          conditionalDir = '{{#has_supabase}}$newFileName{{';
+          finalFileName = 'has_supabase}}';
+        } else if (newFileName.endsWith('_firebase_mixin.dart') &&
+            !newFileName.contains('{{#has_firebase}}')) {
+          conditionalDir = '{{#has_firebase}}$newFileName{{';
+          finalFileName = 'has_firebase}}';
         }
 
         // conditionalDir에 실제 파일명이 들어가도록 문자열 보간 적용
@@ -380,6 +427,16 @@ class SyncMonorepoService {
               // mixins.dart 파일의 export 문을 조건부 템플릿으로 변환
               if (basename == 'mixins.dart') {
                 content = _convertMixinsExports(content);
+              }
+
+              // dependencies.dart 파일의 openapi_service export 문을 조건부 템플릿으로 변환
+              if (basename == 'dependencies.dart') {
+                content = _convertDependenciesExports(content);
+              }
+
+              // pubspec.yaml 파일의 openapi_service 의존성을 조건부 템플릿으로 변환
+              if (basename == 'pubspec.yaml') {
+                content = _convertPubspecDependencies(content, entity.path);
               }
 
               // Repository 파일의 mixin/서비스 사용 패턴을 조건부 템플릿으로 변환
@@ -465,19 +522,21 @@ class SyncMonorepoService {
   }
 
   /// mixins.dart 파일의 export 문을 조건부 템플릿으로 변환
-  /// Repository와 동일하게 모든 네트워크 타입의 export를 생성
+  /// Repository와 동일하게 모든 네트워크/백엔드 타입의 export를 생성
   String _convertMixinsExports(String content) {
     // 이미 조건부 템플릿이 포함되어 있으면 변환하지 않음
     if (content.contains('{{#has_openapi}}') ||
         content.contains('{{#has_serverpod}}') ||
-        content.contains('{{#has_graphql}}')) {
+        content.contains('{{#has_graphql}}') ||
+        content.contains('{{#has_supabase}}') ||
+        content.contains('{{#has_firebase}}')) {
       return content;
     }
 
     // export 문에서 feature/module 이름 추출
     // 예: export 'community_openapi_mixin.dart'; -> community
     final exportPattern = RegExp(
-      r'''export\s+['"](\w+)_(openapi|serverpod|graphql)_mixin\.dart['"];?''',
+      r'''export\s+['"](\w+)_(openapi|serverpod|graphql|supabase|firebase)_mixin\.dart['"];?''',
       multiLine: true,
     );
     final match = exportPattern.firstMatch(content);
@@ -489,7 +548,7 @@ class SyncMonorepoService {
 
     final prefix = match.group(1) ?? '';
 
-    // 모든 네트워크 타입의 export를 생성
+    // 모든 네트워크/백엔드 타입의 export를 생성
     final buffer = StringBuffer();
 
     buffer.writeln('{{#has_openapi}}');
@@ -502,9 +561,112 @@ class SyncMonorepoService {
 
     buffer.writeln('{{#has_graphql}}');
     buffer.writeln("export '${prefix}_graphql_mixin.dart';");
-    buffer.write('{{/has_graphql}}');
+    buffer.writeln('{{/has_graphql}}');
+
+    buffer.writeln('{{#has_supabase}}');
+    buffer.writeln("export '${prefix}_supabase_mixin.dart';");
+    buffer.writeln('{{/has_supabase}}');
+
+    buffer.writeln('{{#has_firebase}}');
+    buffer.writeln("export '${prefix}_firebase_mixin.dart';");
+    buffer.write('{{/has_firebase}}');
 
     return buffer.toString();
+  }
+
+  /// dependencies.dart 파일의 네트워크/백엔드 서비스 export 문을 조건부 템플릿으로 변환
+  String _convertDependenciesExports(String content) {
+    // 이미 조건부 템플릿이 포함되어 있으면 변환하지 않음
+    if (content.contains('{{#has_openapi}}') ||
+        content.contains('{{#has_serverpod}}') ||
+        content.contains('{{#has_graphql}}') ||
+        content.contains('{{#has_supabase}}') ||
+        content.contains('{{#has_firebase}}')) {
+      return content;
+    }
+
+    var result = content;
+
+    // 각 서비스별 export 문을 조건부로 변환
+    final servicePatterns = {
+      'openapi_service': 'has_openapi',
+      'serverpod_service': 'has_serverpod',
+      'graphql_service': 'has_graphql',
+      'supabase_service': 'has_supabase',
+      'firebase_service': 'has_firebase',
+    };
+
+    for (final entry in servicePatterns.entries) {
+      final serviceName = entry.key;
+      final conditionalFlag = entry.value;
+
+      final pattern = RegExp(
+        '''export\\s+['"]package:$serviceName/$serviceName\\.dart['"](?:\\s+hide\\s+\\w+(?:\\s*,\\s*\\w+)*)?;''',
+        multiLine: true,
+      );
+
+      result = result.replaceAllMapped(pattern, (match) {
+        final exportStatement = match.group(0)!;
+        return '{{#$conditionalFlag}}$exportStatement{{/$conditionalFlag}}';
+      });
+    }
+
+    return result;
+  }
+
+  /// pubspec.yaml 파일의 네트워크/백엔드 서비스 의존성을 조건부 템플릿으로 변환
+  ///
+  /// - shared/dependencies/pubspec.yaml: 조건부 템플릿으로 변환
+  /// - feature/*/pubspec.yaml: 서비스 의존성 제거 (dependencies 패키지에서 export되므로)
+  String _convertPubspecDependencies(String content, String filePath) {
+    // 이미 조건부 템플릿이 포함되어 있으면 변환하지 않음
+    if (content.contains('{{#has_openapi}}') ||
+        content.contains('{{#has_serverpod}}') ||
+        content.contains('{{#has_graphql}}') ||
+        content.contains('{{#has_supabase}}') ||
+        content.contains('{{#has_firebase}}')) {
+      return content;
+    }
+
+    var result = content;
+
+    // 각 서비스별 의존성
+    final servicePatterns = {
+      'openapi_service': 'has_openapi',
+      'serverpod_service': 'has_serverpod',
+      'graphql_service': 'has_graphql',
+      'supabase_service': 'has_supabase',
+      'firebase_service': 'has_firebase',
+    };
+
+    // shared/dependencies/pubspec.yaml인지 확인
+    final isDependenciesPubspec = filePath.contains('shared/dependencies/pubspec.yaml') ||
+                                   filePath.contains('shared${path.separator}dependencies${path.separator}pubspec.yaml');
+
+    for (final entry in servicePatterns.entries) {
+      final serviceName = entry.key;
+      final conditionalFlag = entry.value;
+
+      // 패턴: "  service_name: ^0.1.0" (앞에 공백, 줄 끝까지)
+      final pattern = RegExp(
+        '^(\\s+)$serviceName:\\s*\\^[\\d.]+\\s*\$',
+        multiLine: true,
+      );
+
+      if (isDependenciesPubspec) {
+        // shared/dependencies/pubspec.yaml: 조건부 템플릿으로 변환
+        result = result.replaceAllMapped(pattern, (match) {
+          final indent = match.group(1)!;
+          final dependencyLine = match.group(0)!.trim();
+          return '$indent{{#$conditionalFlag}}$dependencyLine{{/$conditionalFlag}}';
+        });
+      } else {
+        // feature/*/pubspec.yaml: 서비스 의존성 라인 완전히 제거
+        result = result.replaceAll(pattern, '');
+      }
+    }
+
+    return result;
   }
 
   /// Repository 파일의 mixin/서비스 사용 패턴을 조건부 템플릿으로 변환
@@ -514,7 +676,9 @@ class SyncMonorepoService {
     // 이미 조건부 템플릿이 포함되어 있으면 변환하지 않음
     if (result.contains('{{#has_openapi}}') ||
         result.contains('{{#has_serverpod}}') ||
-        result.contains('{{#has_graphql}}')) {
+        result.contains('{{#has_graphql}}') ||
+        result.contains('{{#has_supabase}}') ||
+        result.contains('{{#has_firebase}}')) {
       return result;
     }
 
@@ -524,7 +688,9 @@ class SyncMonorepoService {
     // 변환이 성공했으면 (새로운 템플릿 태그가 포함되어 있으면) 반환
     if (convertedClass.contains('{{#has_openapi}}') ||
         convertedClass.contains('{{#has_serverpod}}') ||
-        convertedClass.contains('{{#has_graphql}}')) {
+        convertedClass.contains('{{#has_graphql}}') ||
+        convertedClass.contains('{{#has_supabase}}') ||
+        convertedClass.contains('{{#has_firebase}}')) {
       return convertedClass;
     }
 
@@ -610,12 +776,14 @@ class SyncMonorepoService {
       return content;
     }
 
-    // 네트워크별 주석 추가
+    // 네트워크/백엔드별 주석 추가
     result.add('');
     result.add('{{#has_serverpod}}/// Serverpod Client를 통해 실제 백엔드 API와 통신{{/has_serverpod}}');
     result.add('{{#has_openapi}}/// REST API를 통해 실제 백엔드와 통신{{/has_openapi}}');
     result.add('{{#has_graphql}}/// GraphQL을 통해 실제 백엔드와 통신{{/has_graphql}}');
-    result.add('{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}/// 메모리에서 데이터를 생성하고 관리{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}');
+    result.add('{{#has_supabase}}/// Supabase를 통해 실제 백엔드와 통신{{/has_supabase}}');
+    result.add('{{#has_firebase}}/// Firebase를 통해 실제 백엔드와 통신{{/has_firebase}}');
+    result.add('{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}{{^has_supabase}}{{^has_firebase}}/// 메모리에서 데이터를 생성하고 관리{{/has_firebase}}{{/has_supabase}}{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}');
     result.add('');
 
     // 템플릿 생성
@@ -654,11 +822,13 @@ class SyncMonorepoService {
     // 문서 주석
     buffer.writeln(docComment.trimRight());
 
-    // 네트워크별 주석
+    // 네트워크/백엔드별 주석
     buffer.writeln('{{#has_serverpod}}/// Serverpod Client를 통해 실제 백엔드 API와 통신{{/has_serverpod}}');
     buffer.writeln('{{#has_openapi}}/// REST API를 통해 실제 백엔드와 통신{{/has_openapi}}');
     buffer.writeln('{{#has_graphql}}/// GraphQL을 통해 실제 백엔드와 통신{{/has_graphql}}');
-    buffer.writeln('{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}/// 메모리에서 데이터를 생성하고 관리{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}');
+    buffer.writeln('{{#has_supabase}}/// Supabase를 통해 실제 백엔드와 통신{{/has_supabase}}');
+    buffer.writeln('{{#has_firebase}}/// Firebase를 통해 실제 백엔드와 통신{{/has_firebase}}');
+    buffer.writeln('{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}{{^has_supabase}}{{^has_firebase}}/// 메모리에서 데이터를 생성하고 관리{{/has_firebase}}{{/has_supabase}}{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}');
     buffer.writeln();
 
     final interfaceName = 'I$className';
@@ -667,6 +837,8 @@ class SyncMonorepoService {
     buffer.writeln('    {{#has_serverpod}}with ${mixinPrefix}ServerpodMixin{{/has_serverpod}}');
     buffer.writeln('    {{#has_openapi}}with ${mixinPrefix}OpenapiMixin{{/has_openapi}}');
     buffer.writeln('    {{#has_graphql}}with ${mixinPrefix}GraphqlMixin{{/has_graphql}}');
+    buffer.writeln('    {{#has_supabase}}with ${mixinPrefix}SupabaseMixin{{/has_supabase}}');
+    buffer.writeln('    {{#has_firebase}}with ${mixinPrefix}FirebaseMixin{{/has_firebase}}');
     buffer.writeln('    implements $interfaceName {');
 
     // Serverpod 블록
@@ -741,11 +913,31 @@ class SyncMonorepoService {
     buffer.writeln('  GraphQLClient get graphQLClient => _graphQLClient;');
     buffer.writeln('  {{/has_graphql}}');
 
+    // Supabase 블록
+    buffer.writeln('  {{#has_supabase}}');
+    buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
+    buffer.writeln('  $className(this._supabaseClient);');
+    buffer.writeln('  final SupabaseClient _supabaseClient;');
+    buffer.writeln('  ');
+    buffer.writeln('  @override');
+    buffer.writeln('  SupabaseClient get supabaseClient => _supabaseClient;');
+    buffer.writeln('  {{/has_supabase}}');
+
+    // Firebase 블록
+    buffer.writeln('  {{#has_firebase}}');
+    buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
+    buffer.writeln('  $className(this._firebaseService);');
+    buffer.writeln('  final FirebaseService _firebaseService;');
+    buffer.writeln('  ');
+    buffer.writeln('  @override');
+    buffer.writeln('  FirebaseService get firebaseService => _firebaseService;');
+    buffer.writeln('  {{/has_firebase}}');
+
     // Fallback (no network) 블록
-    buffer.writeln('  {{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}');
+    buffer.writeln('  {{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}{{^has_supabase}}{{^has_firebase}}');
     buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
     buffer.writeln('  $className();');
-    buffer.writeln('  {{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}');
+    buffer.writeln('  {{/has_firebase}}{{/has_supabase}}{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}');
     buffer.write('}');
 
     return buffer.toString();
@@ -897,12 +1089,30 @@ class SyncMonorepoService {
       },
     );
 
+    // /// Supabase를 통해 실제 백엔드와 통신
+    result = result.replaceAllMapped(
+      RegExp(r'^(\s*)///\s*Supabase를\s+통해\s+실제\s+백엔드와\s+통신\s*$', multiLine: true),
+      (match) {
+        final indent = match.group(1) ?? '';
+        return '${indent}{{#has_supabase}}/// Supabase를 통해 실제 백엔드와 통신{{/has_supabase}}';
+      },
+    );
+
+    // /// Firebase를 통해 실제 백엔드와 통신
+    result = result.replaceAllMapped(
+      RegExp(r'^(\s*)///\s*Firebase를\s+통해\s+실제\s+백엔드와\s+통신\s*$', multiLine: true),
+      (match) {
+        final indent = match.group(1) ?? '';
+        return '${indent}{{#has_firebase}}/// Firebase를 통해 실제 백엔드와 통신{{/has_firebase}}';
+      },
+    );
+
     // /// 메모리에서 데이터를 생성하고 관리
     result = result.replaceAllMapped(
       RegExp(r'^(\s*)///\s*메모리에서\s+데이터를\s+생성하고\s+관리\s*$', multiLine: true),
       (match) {
         final indent = match.group(1) ?? '';
-        return '${indent}{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}/// 메모리에서 데이터를 생성하고 관리{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}';
+        return '${indent}{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}{{^has_supabase}}{{^has_firebase}}/// 메모리에서 데이터를 생성하고 관리{{/has_firebase}}{{/has_supabase}}{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}';
       },
     );
 

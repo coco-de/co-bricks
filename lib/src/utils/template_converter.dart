@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:co_bricks/src/services/envrc_service.dart';
 
 /// 템플릿 변환 패턴
@@ -24,20 +26,7 @@ class TemplateConverter {
 
     // 패턴 순서가 중요합니다. 더 구체적인 패턴을 먼저 적용해야 합니다.
 
-    // 0. Apple Developer ID 패턴 (가장 먼저 적용)
-    if (config.appleDeveloperId != null) {
-      patterns.insertAll(
-        0,
-        _buildAppleDeveloperIdPatterns(config.appleDeveloperId!),
-      );
-    }
-
-    // 1. 가장 구체적인 패턴 (Firebase 전체 경로 등)
-    patterns.addAll(
-      _buildFirebasePatterns(projectNames, orgNames, orgTlds, randomProjectIds),
-    );
-
-    // 2. GitHub URL 패턴 (github.com/coco-de/good_teacher.git 등, 프로젝트명보다 먼저)
+    // 0. GitHub URL 패턴 (가장 먼저 적용! 프로젝트명 변환 전에 처리)
     if (config.githubOrg != null && config.githubRepo != null) {
       patterns.addAll(
         _buildGitHubUrlPatterns(
@@ -47,6 +36,21 @@ class TemplateConverter {
         ),
       );
     }
+
+    // 0-1. GitHub 조직명 패턴 (URL 패턴 직후에 적용하여 남은 coco-de 처리)
+    if (config.githubOrg != null) {
+      patterns.addAll(_buildGitHubOrgPatterns(config.githubOrg!));
+    }
+
+    // 1. Apple Developer ID 패턴
+    if (config.appleDeveloperId != null) {
+      patterns.addAll(_buildAppleDeveloperIdPatterns(config.appleDeveloperId!));
+    }
+
+    // 2. 가장 구체적인 패턴 (Firebase 전체 경로 등)
+    patterns.addAll(
+      _buildFirebasePatterns(projectNames, orgNames, orgTlds, randomProjectIds),
+    );
 
     // 3. 도메인 패턴 (app-staging.good_teacher.im 등)
     patterns.addAll(_buildDomainPatterns(projectNames, orgTlds));
@@ -74,12 +78,7 @@ class TemplateConverter {
     // 10. Apple Team ID 패턴
     patterns.addAll(_buildAppleTeamIdPatterns());
 
-    // 11. GitHub 조직명 패턴
-    if (config.githubOrg != null) {
-      patterns.addAll(_buildGitHubOrgPatterns(config.githubOrg!));
-    }
-
-    // 12. GitHub 저장소명 패턴
+    // 11. GitHub 저장소명 패턴
     if (config.githubRepo != null) {
       patterns.addAll(_buildGitHubRepoPatterns(config.githubRepo!));
     }
@@ -138,47 +137,82 @@ class TemplateConverter {
     final patterns = <ReplacementPattern>[];
 
     // github.com/coco-de/good-teacher.git 패턴
-    patterns.add(
-      ReplacementPattern(
-        RegExp(
-          'github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(githubRepo)}\\.git',
-        ),
-        'github.com/{{github_org}}/{{github_repo}}.git',
-      ),
-    );
-
-    // github.com/coco-de/good-teacher 패턴
-    patterns.add(
-      ReplacementPattern(
-        RegExp(
-          'github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(githubRepo)}\\b',
-        ),
-        'github.com/{{github_org}}/{{github_repo}}',
-      ),
-    );
-
-    // 프로젝트명과 일치하는 경우도 처리
+    // 프로젝트명이 포함된 GitHub URL 패턴 처리
     for (final projectName in projectNames) {
-      final projectParam = projectName.replaceAll('_', '-');
-      if (projectParam == githubRepo) {
-        // github.com/coco-de/good-teacher.git → github.com/{{github_org}}/{{project_name.paramCase()}}.git
-        patterns.add(
-          ReplacementPattern(
-            RegExp(
-              'github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(projectParam)}\\.git',
-            ),
-            'github.com/{{github_org}}/{{project_name.paramCase()}}.git',
+      final projectParam = projectName.replaceAll('_', '-');  // good-teacher
+      final projectSnake = projectName;  // good_teacher
+
+      // param-case 버전 (good-teacher)
+      // https:// 포함 버전
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'https://github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(projectParam)}\\.git',
           ),
-        );
-        patterns.add(
-          ReplacementPattern(
-            RegExp(
-              'github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(projectParam)}\\b',
-            ),
-            'github.com/{{github_org}}/{{project_name.paramCase()}}',
+          'https://github.com/{{github_org}}/{{project_name.paramCase()}}.git',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'https://github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(projectParam)}\\b',
           ),
-        );
-      }
+          'https://github.com/{{github_org}}/{{project_name.paramCase()}}',
+        ),
+      );
+      // https:// 없는 버전
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(projectParam)}\\.git',
+          ),
+          'github.com/{{github_org}}/{{project_name.paramCase()}}.git',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(projectParam)}\\b',
+          ),
+          'github.com/{{github_org}}/{{project_name.paramCase()}}',
+        ),
+      );
+
+      // snake_case 버전 (good_teacher) → GitHub는 paramCase 사용
+      // https:// 포함 버전
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'https://github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(projectSnake)}\\.git',
+          ),
+          'https://github.com/{{github_org}}/{{project_name.paramCase()}}.git',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'https://github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(projectSnake)}\\b',
+          ),
+          'https://github.com/{{github_org}}/{{project_name.paramCase()}}',
+        ),
+      );
+      // https:// 없는 버전
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(projectSnake)}\\.git',
+          ),
+          'github.com/{{github_org}}/{{project_name.paramCase()}}.git',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(projectSnake)}\\b',
+          ),
+          'github.com/{{github_org}}/{{project_name.paramCase()}}',
+        ),
+      );
     }
 
     return patterns;
@@ -189,6 +223,13 @@ class TemplateConverter {
     final patterns = <ReplacementPattern>[];
 
     patterns.addAll([
+      // 이미 프로젝트명이 변환된 경우 처리
+      // github.com/coco-de/{{project_name...}} → github.com/{{github_org}}/{{project_name...}}
+      ReplacementPattern(
+        RegExp(r'github\.com/' + _escapeRegex(githubOrg) + r'/\{\{project_name\.'),
+        'github.com/{{github_org}}/{{project_name.',
+      ),
+
       // github.com/coco-de/ 패턴
       ReplacementPattern(
         RegExp('github\\.com/${_escapeRegex(githubOrg)}/'),

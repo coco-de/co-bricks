@@ -73,7 +73,26 @@ source ~/.bashrc
 
 ## 사용법
 
-### App 브릭 동기화
+### 개발 중 (권장)
+
+개발 중에는 최신 코드 변경사항이 즉시 반영되도록 `dart run` 또는 `make` 명령을 사용하세요:
+
+```sh
+# Makefile 사용 (가장 간단)
+$ cd template/co-bricks
+$ make sync-monorepo PROJECT=good_teacher
+$ make sync-app PROJECT=good_teacher
+
+# dart run 직접 사용
+$ dart run template/co-bricks/bin/co_bricks.dart sync --type monorepo --project-dir template/good_teacher
+$ dart run template/co-bricks/bin/co_bricks.dart sync --type app --project-dir template/good_teacher
+```
+
+### 프로덕션 사용
+
+Global activation을 통해 설치한 경우:
+
+#### App 브릭 동기화
 
 ```sh
 # App 브릭 동기화 (현재 디렉토리에서 .envrc 자동 탐지)
@@ -83,7 +102,7 @@ $ co-bricks sync --type app
 $ co-bricks sync --type app --project-dir /path/to/project
 ```
 
-### Monorepo 브릭 동기화
+#### Monorepo 브릭 동기화
 
 ```sh
 # Monorepo 브릭 동기화 (현재 디렉토리에서 .envrc 자동 탐지)
@@ -92,6 +111,12 @@ $ co-bricks sync --type monorepo
 # 특정 프로젝트 디렉토리에서 Monorepo 브릭 동기화
 $ co-bricks sync --type monorepo --project-dir /path/to/project
 ```
+
+> **참고**: Global activation 후 코드를 변경한 경우, 변경사항을 반영하려면 재활성화가 필요합니다:
+> ```sh
+> $ dart pub global deactivate co_bricks
+> $ dart pub global activate --source path /path/to/co-bricks
+> ```
 
 ### 기타 명령어
 

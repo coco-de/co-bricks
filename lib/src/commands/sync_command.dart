@@ -72,6 +72,8 @@ class SyncCommand extends Command<int> {
       _logger.info('   Project: ${config.projectName}');
       _logger.info('   Organization: ${config.orgName}');
       _logger.info('   TLD: ${config.orgTld}');
+      _logger.info('   GitHub Org: ${config.githubOrg}');
+      _logger.info('   GitHub Repo: ${config.githubRepo}');
       _logger.info('');
 
       // 타입에 따라 동기화 실행
