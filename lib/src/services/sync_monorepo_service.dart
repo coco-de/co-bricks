@@ -304,64 +304,112 @@ class SyncMonorepoService {
           config.projectNames,
         );
 
-        // 조건부 템플릿이 필요한 파일명 패턴 처리
-        // _openapi_mixin.dart -> {{#has_openapi}}..._openapi_mixin.dart{{/has_openapi}}
-        if (newFileName.contains('_openapi_mixin.dart') &&
+        // 네트워크별 mixin 파일명을 조건부 템플릿으로 변환
+        // {{#has_openapi}} 디렉토리를 만들고 그 안에 실제 파일명을 가진 파일 생성
+        String? conditionalDir;
+        String finalFileName = newFileName;
+        
+        if (newFileName.endsWith('_openapi_mixin.dart') &&
             !newFileName.contains('{{#has_openapi}}')) {
-          newFileName = '{{#has_openapi}}$newFileName{{/has_openapi}}';
+          conditionalDir = '{{#has_openapi}}';
+          finalFileName = '$newFileName{{/has_openapi}}';
+        } else if (newFileName.endsWith('_serverpod_mixin.dart') &&
+            !newFileName.contains('{{#has_serverpod}}')) {
+          conditionalDir = '{{#has_serverpod}}';
+          finalFileName = '$newFileName{{/has_serverpod}}';
+        } else if (newFileName.endsWith('_graphql_mixin.dart') &&
+            !newFileName.contains('{{#has_graphql}}')) {
+          conditionalDir = '{{#has_graphql}}';
+          finalFileName = '$newFileName{{/has_graphql}}';
         }
 
-        // 파일명이 변경되었거나 조건부 템플릿이 추가된 경우
-        if (newFileName != originalFileName) {
-          try {
-            final newPath = File(
-              path.join(path.dirname(entity.path), newFileName),
-            );
+        // 파일 내용 변환 (파일 이동 전에 수행)
+        File? targetFile;
+        String? convertedContent;
+        
+        if (FileUtils.shouldProcessFile(entity)) {
+          if (await FileUtils.isTextFile(entity) &&
+              await FileUtils.isFileSizeValid(entity)) {
+            try {
+              final originalContent = await entity.readAsString();
+              var content = originalContent;
+              final basename = path.basename(entity.path);
 
-            // 새 파일명이 이미 존재하면 삭제 (중복 방지)
-            if (newPath.existsSync()) {
-              await newPath.delete();
+              // mixins.dart 파일의 export 문을 조건부 템플릿으로 변환
+              if (basename == 'mixins.dart') {
+                content = _convertMixinsExports(content);
+              }
+
+              // Repository 파일의 mixin/서비스 사용 패턴을 조건부 템플릿으로 변환
+              // 생성자 변환을 먼저 실행해야 개별 파라미터 변환과 충돌하지 않음
+              if (basename.endsWith('_repository.dart')) {
+                content = _convertRepositoryPatterns(content);
+              }
+
+              convertedContent = TemplateConverter.convertContent(
+                content,
+                patterns,
+              );
+            } catch (e) {
+              logger.warn('   ⚠️  Error converting file ${entity.path}: $e');
+            }
+          }
+        }
+
+        // 파일명이 변경되었거나 조건부 디렉토리가 필요한 경우
+        if (conditionalDir != null || newFileName != originalFileName) {
+          try {
+            final baseDir = path.dirname(entity.path);
+            final targetPath = conditionalDir != null
+                ? path.join(baseDir, conditionalDir, finalFileName)
+                : path.join(baseDir, finalFileName);
+            
+            targetFile = File(targetPath);
+
+            // 조건부 템플릿 디렉토리 생성
+            if (conditionalDir != null) {
+              final conditionalDirPath = Directory(path.join(baseDir, conditionalDir));
+              if (!conditionalDirPath.existsSync()) {
+                await conditionalDirPath.create(recursive: true);
+              }
             }
 
-            await entity.rename(newPath.path);
+            // 일반 디렉토리도 생성 (필요한 경우)
+            final targetDir = Directory(path.dirname(targetPath));
+            if (!targetDir.existsSync()) {
+              await targetDir.create(recursive: true);
+            }
+
+            // 변환된 내용이 있으면 새 파일에 저장, 없으면 원본 파일 복사
+            if (convertedContent != null) {
+              if (targetFile.existsSync()) {
+                await targetFile.delete();
+              }
+              await targetFile.writeAsString(convertedContent);
+              await entity.delete();
+              convertedFiles++;
+            } else {
+              // 파일 복사 후 원본 삭제
+              if (targetFile.existsSync()) {
+                await targetFile.delete();
+              }
+              await entity.copy(targetFile.path);
+              await entity.delete();
+            }
           } catch (e) {
             // 파일명 변경 실패 시 무시
             logger.warn('   ⚠️  Could not rename file $originalFileName: $e');
           }
-        }
-
-        // 파일 내용 변환
-        if (FileUtils.shouldProcessFile(entity)) {
-          if (!await FileUtils.isTextFile(entity) ||
-              !FileUtils.isFileSizeValid(entity)) {
-            continue;
-          }
-
+        } else if (convertedContent != null) {
+          // 파일명은 변경되지 않았지만 내용이 변환된 경우
           try {
-            var content = await entity.readAsString();
-
-            // mixins.dart 파일의 export 문을 조건부 템플릿으로 변환
-            if (path.basename(entity.path) == 'mixins.dart') {
-              content = _convertMixinsExports(content);
-            }
-
-            // Repository 파일의 mixin/서비스 사용 패턴을 조건부 템플릿으로 변환
-            // 생성자 변환을 먼저 실행해야 개별 파라미터 변환과 충돌하지 않음
-            if (path.basename(entity.path).endsWith('_repository.dart')) {
-              content = _convertRepositoryPatterns(content);
-            }
-
-            final convertedContent = TemplateConverter.convertContent(
-              content,
-              patterns,
-            );
-
-            if (convertedContent != content) {
+            final originalContent = await entity.readAsString();
+            if (convertedContent != originalContent) {
               await entity.writeAsString(convertedContent);
               convertedFiles++;
             }
           } catch (e) {
-            logger.warn('   ⚠️  Error processing ${entity.path}: $e');
+            logger.warn('   ⚠️  Error writing converted content to ${entity.path}: $e');
           }
         }
       }
@@ -383,12 +431,13 @@ class SyncMonorepoService {
 
     // _openapi_mixin.dart export 문을 조건부 템플릿으로 감싸기
     // 작은따옴표와 큰따옴표 모두 지원
+    // 주의: \s 대신 [ \t]를 사용하여 개행 문자가 indent에 포함되지 않도록 함
     final openapiPatternSingle = RegExp(
-      r"^(\s*)export\s+'(.+?_openapi_mixin\.dart)';?\s*$",
+      r"^([ \t]*)export\s+'(.+?_openapi_mixin\.dart)';?\s*$",
       multiLine: true,
     );
     final openapiPatternDouble = RegExp(
-      r'^(\s*)export\s+"(.+?_openapi_mixin\.dart)";?\s*$',
+      r'^([ \t]*)export\s+"(.+?_openapi_mixin\.dart)";?\s*$',
       multiLine: true,
     );
     result = result.replaceAllMapped(openapiPatternSingle, (match) {
@@ -404,11 +453,11 @@ class SyncMonorepoService {
 
     // _serverpod_mixin.dart export 문을 조건부 템플릿으로 감싸기
     final serverpodPatternSingle = RegExp(
-      r"^(\s*)export\s+'(.+?_serverpod_mixin\.dart)';?\s*$",
+      r"^([ \t]*)export\s+'(.+?_serverpod_mixin\.dart)';?\s*$",
       multiLine: true,
     );
     final serverpodPatternDouble = RegExp(
-      r'^(\s*)export\s+"(.+?_serverpod_mixin\.dart)";?\s*$',
+      r'^([ \t]*)export\s+"(.+?_serverpod_mixin\.dart)";?\s*$',
       multiLine: true,
     );
     result = result.replaceAllMapped(serverpodPatternSingle, (match) {
@@ -424,11 +473,11 @@ class SyncMonorepoService {
 
     // _graphql_mixin.dart export 문을 조건부 템플릿으로 감싸기
     final graphqlPatternSingle = RegExp(
-      r"^(\s*)export\s+'(.+?_graphql_mixin\.dart)';?\s*$",
+      r"^([ \t]*)export\s+'(.+?_graphql_mixin\.dart)';?\s*$",
       multiLine: true,
     );
     final graphqlPatternDouble = RegExp(
-      r'^(\s*)export\s+"(.+?_graphql_mixin\.dart)";?\s*$',
+      r'^([ \t]*)export\s+"(.+?_graphql_mixin\.dart)";?\s*$',
       multiLine: true,
     );
     result = result.replaceAllMapped(graphqlPatternSingle, (match) {
