@@ -346,6 +346,7 @@ class SyncMonorepoService {
             }
 
             // Repository 파일의 mixin/서비스 사용 패턴을 조건부 템플릿으로 변환
+            // 생성자 변환을 먼저 실행해야 개별 파라미터 변환과 충돌하지 않음
             if (path.basename(entity.path).endsWith('_repository.dart')) {
               content = _convertRepositoryPatterns(content);
             }
@@ -490,24 +491,6 @@ class SyncMonorepoService {
       },
     );
 
-    // this._openApiService, (생성자 파라미터)
-    result = result.replaceAllMapped(
-      RegExp(r'(\s+)this\._openApiService,?\s*$', multiLine: true),
-      (match) {
-        final indent = match.group(1) ?? '';
-        return '${indent}{{#has_openapi}}this._openApiService,{{/has_openapi}}';
-      },
-    );
-
-    // OpenApiService _openApiService, (생성자 파라미터)
-    result = result.replaceAllMapped(
-      RegExp(r'(\s+)OpenApiService\s+_openApiService,?\s*$', multiLine: true),
-      (match) {
-        final indent = match.group(1) ?? '';
-        return '${indent}{{#has_openapi}}OpenApiService _openApiService,{{/has_openapi}}';
-      },
-    );
-
     // Serverpod 패턴 변환
     // with HomeServerpodMixin
     result = result.replaceAllMapped(
@@ -578,23 +561,6 @@ class SyncMonorepoService {
       },
     );
 
-    // 생성자 파라미터 변환 (this._graphQLClient)
-    result = result.replaceAllMapped(
-      RegExp(r'(\s+)this\._graphQLClient\)?\s*$', multiLine: true),
-      (match) {
-        final indent = match.group(1) ?? '';
-        return '${indent}{{#has_graphql}}this._graphQLClient{{/has_graphql}})';
-      },
-    );
-
-    // 생성자 파라미터 변환 (GraphQLClient _graphQLClient)
-    result = result.replaceAllMapped(
-      RegExp(r'(\s+)GraphQLClient\s+_graphQLClient\)?\s*$', multiLine: true),
-      (match) {
-        final indent = match.group(1) ?? '';
-        return '${indent}{{#has_graphql}}GraphQLClient _graphQLClient{{/has_graphql}})';
-      },
-    );
 
     // 주석 변환
     // /// REST API를 통해 실제 백엔드와 통신
@@ -641,23 +607,9 @@ class SyncMonorepoService {
         return '${indent}{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}/// 메모리에서 데이터를 생성하고 관리{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}';
       },
     );
-    
-    // 생성자 주석 변환
-    // /// Home Repository 생성자
-    result = result.replaceAllMapped(
-      RegExp(r'^(\s*)///\s*(\w+)\s+Repository\s+생성자\s*$', multiLine: true),
-      (match) {
-        final indent = match.group(1) ?? '';
-        final repoName = match.group(2) ?? '';
-        // 생성자 주석은 모든 조건부 템플릿 블록 앞에 위치해야 함
-        // 실제로는 생성자 변환 후에 처리되므로 여기서는 그대로 유지
-        return '${indent}/// $repoName Repository 생성자';
-      },
-    );
 
-    // 생성자 변환 (복잡한 패턴)
-    // HomeRepository(this._openApiService, this._feedItemDao, this._bannerDao);
-    // -> {{#has_openapi}}HomeRepository(this._openApiService, this._feedItemDao, this._bannerDao);{{/has_openapi}}
+    // 생성자 변환을 먼저 실행 (개별 파라미터 변환과 충돌 방지)
+    // 생성자 주석도 함께 변환됨
     result = _convertRepositoryConstructor(result);
 
     return result;
@@ -668,24 +620,24 @@ class SyncMonorepoService {
     var result = content;
 
     // 생성자 패턴 찾기 (여러 줄에 걸친 생성자)
-    // HomeRepository(
+    // CommunityRepository(
     //   this._openApiService,
-    //   this._feedItemDao,
-    //   this._bannerDao,
+    //   this._postDao,
+    //   this._commentDao,
     // );
 
-    // OpenAPI 생성자 패턴
+    // OpenAPI 생성자 패턴 (여러 줄 지원)
+    // 생성자 시작부터 끝까지 매칭 (괄호 안의 모든 내용 포함)
+    // 생성자 주석 다음에 오는 생성자 블록 전체를 매칭
     final openApiConstructorPattern = RegExp(
-      r'^(\s*)(\w+Repository)\(\s*this\._openApiService[^)]*\);\s*$',
+      r'(\s*)///\s+\w+\s+Repository\s+생성자\s*\n\s*(\w+Repository)\s*\(\s*this\._openApiService[\s\S]*?\);\s*',
       multiLine: true,
-      dotAll: true,
     );
 
-    // Serverpod 생성자 패턴
+    // Serverpod 생성자 패턴 (여러 줄 지원)
     final serverpodConstructorPattern = RegExp(
-      r'^(\s*)(\w+Repository)\(\s*this\._podService[^)]*\);\s*$',
+      r'(\s*)///\s+\w+\s+Repository\s+생성자\s*\n\s*(\w+Repository)\s*\(\s*this\._podService[\s\S]*?\);\s*',
       multiLine: true,
-      dotAll: true,
     );
 
     // GraphQL 생성자 패턴
@@ -721,16 +673,18 @@ class SyncMonorepoService {
             .map((line) {
               final trimmed = line.trim();
               if (trimmed.isEmpty) return '';
-              // 이미 인덴트가 있으면 유지, 없으면 추가
-              if (line.startsWith(' ')) {
+              // 원본 인덴트 유지
+              if (line.trim() == trimmed && line != trimmed) {
                 return line;
               }
+              // 인덴트 추가
               return '$indent  $trimmed';
             })
             .where((line) => line.isNotEmpty)
             .join('\n');
 
-        return '${indent}{{#has_openapi}}\n$indent$className(\n$indentedBody\n$indent);\n${indent}{{/has_openapi}}';
+        // 생성자 주석도 포함하여 변환
+        return '${indent}{{#has_openapi}}\n$indent/// ${className.replaceAll('Repository', '')} Repository 생성자\n$indent$className(\n$indentedBody\n$indent);\n${indent}{{/has_openapi}}';
       }
       return fullMatch;
     });
@@ -755,16 +709,18 @@ class SyncMonorepoService {
             .map((line) {
               final trimmed = line.trim();
               if (trimmed.isEmpty) return '';
-              // 이미 인덴트가 있으면 유지, 없으면 추가
-              if (line.startsWith(' ')) {
+              // 원본 인덴트 유지
+              if (line.trim() == trimmed && line != trimmed) {
                 return line;
               }
+              // 인덴트 추가
               return '$indent  $trimmed';
             })
             .where((line) => line.isNotEmpty)
             .join('\n');
 
-        return '${indent}{{#has_serverpod}}\n$indent$className(\n$indentedBody\n$indent);\n${indent}{{/has_serverpod}}';
+        // 생성자 주석도 포함하여 변환
+        return '${indent}{{#has_serverpod}}\n$indent/// ${className.replaceAll('Repository', '')} Repository 생성자\n$indent$className(\n$indentedBody\n$indent);\n${indent}{{/has_serverpod}}';
       }
       return fullMatch;
     });
