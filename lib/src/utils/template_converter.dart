@@ -26,7 +26,10 @@ class TemplateConverter {
 
     // 0. Apple Developer ID 패턴 (가장 먼저 적용)
     if (config.appleDeveloperId != null) {
-      patterns.insertAll(0, _buildAppleDeveloperIdPatterns(config.appleDeveloperId!));
+      patterns.insertAll(
+        0,
+        _buildAppleDeveloperIdPatterns(config.appleDeveloperId!),
+      );
     }
 
     // 1. 가장 구체적인 패턴 (Firebase 전체 경로 등)
@@ -34,31 +37,54 @@ class TemplateConverter {
       _buildFirebasePatterns(projectNames, orgNames, orgTlds, randomProjectIds),
     );
 
-    // 2. 도메인 패턴 (app-staging.good_teacher.im 등)
+    // 2. GitHub URL 패턴 (github.com/coco-de/good_teacher.git 등, 프로젝트명보다 먼저)
+    if (config.githubOrg != null && config.githubRepo != null) {
+      patterns.addAll(
+        _buildGitHubUrlPatterns(
+          config.githubOrg!,
+          config.githubRepo!,
+          projectNames,
+        ),
+      );
+    }
+
+    // 3. 도메인 패턴 (app-staging.good_teacher.im 등)
     patterns.addAll(_buildDomainPatterns(projectNames, orgTlds));
 
-    // 3. 이메일 주소 패턴
-    patterns.addAll(_buildEmailPatterns(orgNames, orgTlds, config.appleDeveloperId));
+    // 4. 이메일 주소 패턴
+    patterns.addAll(
+      _buildEmailPatterns(orgNames, orgTlds, config.appleDeveloperId),
+    );
 
-    // 4. URL Scheme 패턴
+    // 5. URL Scheme 패턴
     patterns.addAll(_buildUrlSchemePatterns(projectNames));
 
-    // 5. 프로젝트명 패턴
+    // 6. 프로젝트명 패턴
     patterns.addAll(_buildProjectPatterns(projectNames));
 
-    // 6. 조직명 패턴
+    // 7. 조직명 패턴
     patterns.addAll(_buildOrgPatterns(orgNames));
 
-    // 7. 케이스 변환 패턴
+    // 8. 케이스 변환 패턴
     patterns.addAll(_buildCasePatterns(projectNames));
 
-    // 8. Random project ID 단독 패턴 (lgxf 같은 패턴)
+    // 9. Random project ID 단독 패턴 (lgxf 같은 패턴)
     patterns.addAll(_buildRandomProjectIdPatterns(randomProjectIds));
 
-    // 9. Apple Team ID 패턴
+    // 10. Apple Team ID 패턴
     patterns.addAll(_buildAppleTeamIdPatterns());
 
-    // 10. org_tld 단독 패턴 (im. 같은 패턴, 가장 마지막에 처리)
+    // 11. GitHub 조직명 패턴
+    if (config.githubOrg != null) {
+      patterns.addAll(_buildGitHubOrgPatterns(config.githubOrg!));
+    }
+
+    // 12. GitHub 저장소명 패턴
+    if (config.githubRepo != null) {
+      patterns.addAll(_buildGitHubRepoPatterns(config.githubRepo!));
+    }
+
+    // 13. org_tld 단독 패턴 (im. 같은 패턴, 가장 마지막에 처리)
     patterns.addAll(_buildOrgTldPatterns(orgTlds));
 
     return patterns;
@@ -99,6 +125,111 @@ class TemplateConverter {
         ),
       ]);
     }
+
+    return patterns;
+  }
+
+  /// GitHub URL 패턴 생성 (전체 URL 패턴, 더 구체적)
+  static List<ReplacementPattern> _buildGitHubUrlPatterns(
+    String githubOrg,
+    String githubRepo,
+    List<String> projectNames,
+  ) {
+    final patterns = <ReplacementPattern>[];
+
+    // github.com/coco-de/good-teacher.git 패턴
+    patterns.add(
+      ReplacementPattern(
+        RegExp(
+          'github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(githubRepo)}\\.git',
+        ),
+        'github.com/{{github_org}}/{{github_repo}}.git',
+      ),
+    );
+
+    // github.com/coco-de/good-teacher 패턴
+    patterns.add(
+      ReplacementPattern(
+        RegExp(
+          'github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(githubRepo)}\\b',
+        ),
+        'github.com/{{github_org}}/{{github_repo}}',
+      ),
+    );
+
+    // 프로젝트명과 일치하는 경우도 처리
+    for (final projectName in projectNames) {
+      final projectParam = projectName.replaceAll('_', '-');
+      if (projectParam == githubRepo) {
+        // github.com/coco-de/good-teacher.git → github.com/{{github_org}}/{{project_name.paramCase()}}.git
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              'github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(projectParam)}\\.git',
+            ),
+            'github.com/{{github_org}}/{{project_name.paramCase()}}.git',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              'github\\.com/${_escapeRegex(githubOrg)}/${_escapeRegex(projectParam)}\\b',
+            ),
+            'github.com/{{github_org}}/{{project_name.paramCase()}}',
+          ),
+        );
+      }
+    }
+
+    return patterns;
+  }
+
+  /// GitHub 조직명 패턴 생성
+  static List<ReplacementPattern> _buildGitHubOrgPatterns(String githubOrg) {
+    final patterns = <ReplacementPattern>[];
+
+    patterns.addAll([
+      // github.com/coco-de/ 패턴
+      ReplacementPattern(
+        RegExp('github\\.com/${_escapeRegex(githubOrg)}/'),
+        'github.com/{{github_org}}/',
+      ),
+      // github.com/coco-de 패턴 (끝에 슬래시 없음)
+      ReplacementPattern(
+        RegExp('github\\.com/${_escapeRegex(githubOrg)}\\b'),
+        'github.com/{{github_org}}',
+      ),
+      // coco-de/ 패턴 (앞에 github.com 없음)
+      ReplacementPattern(
+        RegExp('\\b${_escapeRegex(githubOrg)}/'),
+        '{{github_org}}/',
+      ),
+      // coco-de 패턴 (단독)
+      ReplacementPattern(
+        RegExp('\\b${_escapeRegex(githubOrg)}\\b'),
+        '{{github_org}}',
+      ),
+    ]);
+
+    return patterns;
+  }
+
+  /// GitHub 저장소명 패턴 생성
+  static List<ReplacementPattern> _buildGitHubRepoPatterns(String githubRepo) {
+    final patterns = <ReplacementPattern>[];
+
+    patterns.addAll([
+      // good-teacher.git 패턴
+      ReplacementPattern(
+        RegExp('${_escapeRegex(githubRepo)}\\.git'),
+        '{{github_repo}}.git',
+      ),
+      // good-teacher 패턴
+      ReplacementPattern(
+        RegExp('\\b${_escapeRegex(githubRepo)}\\b'),
+        '{{github_repo}}',
+      ),
+    ]);
 
     return patterns;
   }
@@ -586,7 +717,7 @@ class TemplateConverter {
     String appleDeveloperId,
   ) {
     final patterns = <ReplacementPattern>[];
-    
+
     // 정확한 이메일 주소 매칭 (따옴표 포함)
     patterns.addAll([
       ReplacementPattern(
@@ -621,7 +752,7 @@ class TemplateConverter {
         // appleDeveloperId와 일치하는 이메일은 이미 처리되었으므로 제외
         final techEmail = 'tech@$orgLower.$orgTld';
         final devEmail = 'dev@$orgLower.$orgTld';
-        
+
         if (appleDeveloperId != techEmail && appleDeveloperId != devEmail) {
           patterns.addAll([
             ReplacementPattern(
@@ -638,7 +769,7 @@ class TemplateConverter {
             ),
           ]);
         }
-        
+
         patterns.addAll([
           ReplacementPattern(
             RegExp(

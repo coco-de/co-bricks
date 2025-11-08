@@ -16,11 +16,11 @@ class SyncMonorepoService {
   /// Monorepo 동기화 실행
   Future<void> sync(ProjectConfig config, Directory? projectDir) async {
     final rootDir = projectDir ?? Directory.current;
-    
+
     // template 디렉토리 찾기 (상위로 올라가면서)
     var currentDir = rootDir;
     Directory? templateDir;
-    
+
     while (true) {
       final candidateTemplateDir = Directory(
         path.join(currentDir.path, 'template', config.projectName),
@@ -29,14 +29,14 @@ class SyncMonorepoService {
         templateDir = candidateTemplateDir;
         break;
       }
-      
+
       final parent = currentDir.parent;
       if (parent.path == currentDir.path) {
         break;
       }
       currentDir = parent;
     }
-    
+
     if (templateDir == null) {
       throw FileSystemException(
         'Template directory not found: template/${config.projectName}',
@@ -47,21 +47,23 @@ class SyncMonorepoService {
     // bricks 디렉토리 찾기 (상위로 올라가면서)
     currentDir = rootDir;
     Directory? bricksDir;
-    
+
     while (true) {
-      final candidateBricksDir = Directory(path.join(currentDir.path, 'bricks'));
+      final candidateBricksDir = Directory(
+        path.join(currentDir.path, 'bricks'),
+      );
       if (candidateBricksDir.existsSync()) {
         bricksDir = candidateBricksDir;
         break;
       }
-      
+
       final parent = currentDir.parent;
       if (parent.path == currentDir.path) {
         break;
       }
       currentDir = parent;
     }
-    
+
     if (bricksDir == null) {
       throw FileSystemException(
         'Bricks directory not found. Please ensure bricks/ directory exists.',
@@ -81,7 +83,9 @@ class SyncMonorepoService {
     logger.info('🚀 Template Monorepo Synchronization');
     logger.info('📍 Root: $rootDir');
     logger.info('📄 Source: template/${config.projectName}/');
-    logger.info('🎯 Target: bricks/monorepo/__brick__/{{project_name.snakeCase()}}/');
+    logger.info(
+      '🎯 Target: bricks/monorepo/__brick__/{{project_name.snakeCase()}}/',
+    );
     logger.info('');
 
     // 동기화할 디렉토리들
@@ -192,10 +196,9 @@ class SyncMonorepoService {
 
         if (newDirName != dirName) {
           try {
-            final newPath = Directory(path.join(
-              path.dirname(entity.path),
-              newDirName,
-            ));
+            final newPath = Directory(
+              path.join(path.dirname(entity.path), newDirName),
+            );
             await entity.rename(newPath.path);
             renamedDirs++;
           } catch (e) {
@@ -216,22 +219,54 @@ class SyncMonorepoService {
 
     await for (final entity in dir.list(recursive: true)) {
       if (entity is File) {
-        // 파일명 변환
         final originalFileName = path.basename(entity.path);
-        final newFileName = FileUtils.convertFileName(
-          originalFileName,
+
+        // 이미 조건부 템플릿이 포함된 파일명인지 확인
+        final hasConditionalTemplate =
+            originalFileName.contains('{{#') &&
+            originalFileName.contains('{{/');
+
+        // 조건부 템플릿이 포함된 파일명에서 실제 파일명 추출
+        String actualFileName = originalFileName;
+        if (hasConditionalTemplate) {
+          // {{#has_openapi}}...{{/has_openapi}} 패턴에서 실제 파일명 추출
+          final match = RegExp(
+            r'\{\{#\w+\}\}(.+?)\{\{/\w+\}\}',
+          ).firstMatch(originalFileName);
+          if (match != null) {
+            actualFileName = match.group(1)!;
+          }
+        }
+
+        // 파일명 변환
+        var newFileName = FileUtils.convertFileName(
+          actualFileName,
           config.projectNames,
         );
 
+        // 조건부 템플릿이 필요한 파일명 패턴 처리
+        // _openapi_mixin.dart -> {{#has_openapi}}..._openapi_mixin.dart{{/has_openapi}}
+        if (newFileName.contains('_openapi_mixin.dart') &&
+            !newFileName.contains('{{#has_openapi}}')) {
+          newFileName = '{{#has_openapi}}$newFileName{{/has_openapi}}';
+        }
+
+        // 파일명이 변경되었거나 조건부 템플릿이 추가된 경우
         if (newFileName != originalFileName) {
           try {
-            final newPath = File(path.join(
-              path.dirname(entity.path),
-              newFileName,
-            ));
+            final newPath = File(
+              path.join(path.dirname(entity.path), newFileName),
+            );
+
+            // 새 파일명이 이미 존재하면 삭제 (중복 방지)
+            if (newPath.existsSync()) {
+              await newPath.delete();
+            }
+
             await entity.rename(newPath.path);
-          } catch (_) {
+          } catch (e) {
             // 파일명 변경 실패 시 무시
+            logger.warn('   ⚠️  Could not rename file $originalFileName: $e');
           }
         }
 
@@ -243,7 +278,13 @@ class SyncMonorepoService {
           }
 
           try {
-            final content = await entity.readAsString();
+            var content = await entity.readAsString();
+
+            // mixins.dart 파일의 export 문을 조건부 템플릿으로 변환
+            if (path.basename(entity.path) == 'mixins.dart') {
+              content = _convertMixinsExports(content);
+            }
+
             final convertedContent = TemplateConverter.convertContent(
               content,
               patterns,
@@ -261,6 +302,81 @@ class SyncMonorepoService {
     }
 
     return {'converted': convertedFiles};
+  }
+
+  /// mixins.dart 파일의 export 문을 조건부 템플릿으로 변환
+  String _convertMixinsExports(String content) {
+    var result = content;
+
+    // 이미 조건부 템플릿이 포함되어 있으면 변환하지 않음
+    if (result.contains('{{#has_openapi}}') ||
+        result.contains('{{#has_serverpod}}') ||
+        result.contains('{{#has_graphql}}')) {
+      return result;
+    }
+
+    // _openapi_mixin.dart export 문을 조건부 템플릿으로 감싸기
+    // 작은따옴표와 큰따옴표 모두 지원
+    final openapiPatternSingle = RegExp(
+      r"^(\s*)export\s+'(.+?_openapi_mixin\.dart)';?\s*$",
+      multiLine: true,
+    );
+    final openapiPatternDouble = RegExp(
+      r'^(\s*)export\s+"(.+?_openapi_mixin\.dart)";?\s*$',
+      multiLine: true,
+    );
+    result = result.replaceAllMapped(openapiPatternSingle, (match) {
+      final indent = match.group(1) ?? '';
+      final filePath = match.group(2) ?? '';
+      return '${indent}{{#has_openapi}}\n${indent}export \'$filePath\';\n${indent}{{/has_openapi}}';
+    });
+    result = result.replaceAllMapped(openapiPatternDouble, (match) {
+      final indent = match.group(1) ?? '';
+      final filePath = match.group(2) ?? '';
+      return '${indent}{{#has_openapi}}\n${indent}export "$filePath";\n${indent}{{/has_openapi}}';
+    });
+
+    // _serverpod_mixin.dart export 문을 조건부 템플릿으로 감싸기
+    final serverpodPatternSingle = RegExp(
+      r"^(\s*)export\s+'(.+?_serverpod_mixin\.dart)';?\s*$",
+      multiLine: true,
+    );
+    final serverpodPatternDouble = RegExp(
+      r'^(\s*)export\s+"(.+?_serverpod_mixin\.dart)";?\s*$',
+      multiLine: true,
+    );
+    result = result.replaceAllMapped(serverpodPatternSingle, (match) {
+      final indent = match.group(1) ?? '';
+      final filePath = match.group(2) ?? '';
+      return '${indent}{{#has_serverpod}}\n${indent}export \'$filePath\';\n${indent}{{/has_serverpod}}';
+    });
+    result = result.replaceAllMapped(serverpodPatternDouble, (match) {
+      final indent = match.group(1) ?? '';
+      final filePath = match.group(2) ?? '';
+      return '${indent}{{#has_serverpod}}\n${indent}export "$filePath";\n${indent}{{/has_serverpod}}';
+    });
+
+    // _graphql_mixin.dart export 문을 조건부 템플릿으로 감싸기
+    final graphqlPatternSingle = RegExp(
+      r"^(\s*)export\s+'(.+?_graphql_mixin\.dart)';?\s*$",
+      multiLine: true,
+    );
+    final graphqlPatternDouble = RegExp(
+      r'^(\s*)export\s+"(.+?_graphql_mixin\.dart)";?\s*$',
+      multiLine: true,
+    );
+    result = result.replaceAllMapped(graphqlPatternSingle, (match) {
+      final indent = match.group(1) ?? '';
+      final filePath = match.group(2) ?? '';
+      return '${indent}{{#has_graphql}}\n${indent}export \'$filePath\';\n${indent}{{/has_graphql}}';
+    });
+    result = result.replaceAllMapped(graphqlPatternDouble, (match) {
+      final indent = match.group(1) ?? '';
+      final filePath = match.group(2) ?? '';
+      return '${indent}{{#has_graphql}}\n${indent}export "$filePath";\n${indent}{{/has_graphql}}';
+    });
+
+    return result;
   }
 
   /// 단일 파일 동기화
@@ -297,4 +413,3 @@ class SyncMonorepoService {
     }
   }
 }
-
