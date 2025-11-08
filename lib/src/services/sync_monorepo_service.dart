@@ -145,7 +145,9 @@ class SyncMonorepoService {
     final openApiBricks = ['openapi', 'openapi_service'];
 
     for (final brickName in openApiBricks) {
-      final sourceDir = Directory(path.join(templateDir.path, 'package', brickName));
+      final sourceDir = Directory(
+        path.join(templateDir.path, 'package', brickName),
+      );
       final targetBrickDir = Directory(path.join(bricksDir.path, brickName));
 
       if (!sourceDir.existsSync()) {
@@ -153,11 +155,15 @@ class SyncMonorepoService {
       }
 
       if (!targetBrickDir.existsSync()) {
-        logger.warn('\n⚠️  Target brick not found: ${targetBrickDir.path}, skipping...');
+        logger.warn(
+          '\n⚠️  Target brick not found: ${targetBrickDir.path}, skipping...',
+        );
         continue;
       }
 
-      final targetDir = Directory(path.join(targetBrickDir.path, '__brick__', brickName));
+      final targetDir = Directory(
+        path.join(targetBrickDir.path, '__brick__', brickName),
+      );
 
       logger.info('\n📦 Syncing $brickName brick...');
 
@@ -339,6 +345,11 @@ class SyncMonorepoService {
               content = _convertMixinsExports(content);
             }
 
+            // Repository 파일의 mixin/서비스 사용 패턴을 조건부 템플릿으로 변환
+            if (path.basename(entity.path).endsWith('_repository.dart')) {
+              content = _convertRepositoryPatterns(content);
+            }
+
             final convertedContent = TemplateConverter.convertContent(
               content,
               patterns,
@@ -428,6 +439,348 @@ class SyncMonorepoService {
       final indent = match.group(1) ?? '';
       final filePath = match.group(2) ?? '';
       return '${indent}{{#has_graphql}}\n${indent}export "$filePath";\n${indent}{{/has_graphql}}';
+    });
+
+    return result;
+  }
+
+  /// Repository 파일의 mixin/서비스 사용 패턴을 조건부 템플릿으로 변환
+  String _convertRepositoryPatterns(String content) {
+    var result = content;
+
+    // 이미 조건부 템플릿이 포함되어 있으면 변환하지 않음
+    if (result.contains('{{#has_openapi}}') ||
+        result.contains('{{#has_serverpod}}') ||
+        result.contains('{{#has_graphql}}')) {
+      return result;
+    }
+
+    // OpenAPI 패턴 변환
+    // with HomeOpenapiMixin
+    result = result.replaceAllMapped(
+      RegExp(r'^(\s*)with\s+(\w+OpenapiMixin)\s*$', multiLine: true),
+      (match) {
+        final indent = match.group(1) ?? '';
+        final mixinName = match.group(2) ?? '';
+        return '${indent}{{#has_openapi}}with $mixinName{{/has_openapi}}';
+      },
+    );
+
+    // final OpenApiService _openApiService;
+    result = result.replaceAllMapped(
+      RegExp(r'^(\s*)final\s+OpenApiService\s+(\w+);\s*$', multiLine: true),
+      (match) {
+        final indent = match.group(1) ?? '';
+        final varName = match.group(2) ?? '';
+        return '${indent}{{#has_openapi}}final OpenApiService $varName;{{/has_openapi}}';
+      },
+    );
+
+    // OpenApiService get openApiService => _openApiService;
+    result = result.replaceAllMapped(
+      RegExp(
+        r'^(\s*)OpenApiService\s+get\s+(\w+)\s*=>\s*(\w+);\s*$',
+        multiLine: true,
+      ),
+      (match) {
+        final indent = match.group(1) ?? '';
+        final getterName = match.group(2) ?? '';
+        final varName = match.group(3) ?? '';
+        return '${indent}{{#has_openapi}}OpenApiService get $getterName => $varName;{{/has_openapi}}';
+      },
+    );
+
+    // this._openApiService, (생성자 파라미터)
+    result = result.replaceAllMapped(
+      RegExp(r'(\s+)this\._openApiService,?\s*$', multiLine: true),
+      (match) {
+        final indent = match.group(1) ?? '';
+        return '${indent}{{#has_openapi}}this._openApiService,{{/has_openapi}}';
+      },
+    );
+
+    // OpenApiService _openApiService, (생성자 파라미터)
+    result = result.replaceAllMapped(
+      RegExp(r'(\s+)OpenApiService\s+_openApiService,?\s*$', multiLine: true),
+      (match) {
+        final indent = match.group(1) ?? '';
+        return '${indent}{{#has_openapi}}OpenApiService _openApiService,{{/has_openapi}}';
+      },
+    );
+
+    // Serverpod 패턴 변환
+    // with HomeServerpodMixin
+    result = result.replaceAllMapped(
+      RegExp(r'^(\s*)with\s+(\w+ServerpodMixin)\s*$', multiLine: true),
+      (match) {
+        final indent = match.group(1) ?? '';
+        final mixinName = match.group(2) ?? '';
+        return '${indent}{{#has_serverpod}}with $mixinName{{/has_serverpod}}';
+      },
+    );
+
+    // final pod.PodService _podService;
+    result = result.replaceAllMapped(
+      RegExp(r'^(\s*)final\s+pod\.PodService\s+(\w+);\s*$', multiLine: true),
+      (match) {
+        final indent = match.group(1) ?? '';
+        final varName = match.group(2) ?? '';
+        return '${indent}{{#has_serverpod}}final pod.PodService $varName;{{/has_serverpod}}';
+      },
+    );
+
+    // pod.Client get client => _podService.client;
+    result = result.replaceAllMapped(
+      RegExp(
+        r'^(\s*)pod\.Client\s+get\s+(\w+)\s*=>\s*(\w+\.\w+);\s*$',
+        multiLine: true,
+      ),
+      (match) {
+        final indent = match.group(1) ?? '';
+        final getterName = match.group(2) ?? '';
+        final expression = match.group(3) ?? '';
+        return '${indent}{{#has_serverpod}}pod.Client get $getterName => $expression;{{/has_serverpod}}';
+      },
+    );
+
+    // GraphQL 패턴 변환
+    // with HomeGraphqlMixin
+    result = result.replaceAllMapped(
+      RegExp(r'^(\s*)with\s+(\w+GraphqlMixin)\s*$', multiLine: true),
+      (match) {
+        final indent = match.group(1) ?? '';
+        final mixinName = match.group(2) ?? '';
+        return '${indent}{{#has_graphql}}with $mixinName{{/has_graphql}}';
+      },
+    );
+
+    // final GraphQLClient _graphQLClient;
+    result = result.replaceAllMapped(
+      RegExp(r'^(\s*)final\s+GraphQLClient\s+(\w+);\s*$', multiLine: true),
+      (match) {
+        final indent = match.group(1) ?? '';
+        final varName = match.group(2) ?? '';
+        return '${indent}{{#has_graphql}}final GraphQLClient $varName;{{/has_graphql}}';
+      },
+    );
+
+    // GraphQLClient get graphQLClient => _graphQLClient;
+    result = result.replaceAllMapped(
+      RegExp(
+        r'^(\s*)GraphQLClient\s+get\s+(\w+)\s*=>\s*(\w+);\s*$',
+        multiLine: true,
+      ),
+      (match) {
+        final indent = match.group(1) ?? '';
+        final getterName = match.group(2) ?? '';
+        final varName = match.group(3) ?? '';
+        return '${indent}{{#has_graphql}}GraphQLClient get $getterName => $varName;{{/has_graphql}}';
+      },
+    );
+
+    // 생성자 파라미터 변환 (this._graphQLClient)
+    result = result.replaceAllMapped(
+      RegExp(r'(\s+)this\._graphQLClient\)?\s*$', multiLine: true),
+      (match) {
+        final indent = match.group(1) ?? '';
+        return '${indent}{{#has_graphql}}this._graphQLClient{{/has_graphql}})';
+      },
+    );
+
+    // 생성자 파라미터 변환 (GraphQLClient _graphQLClient)
+    result = result.replaceAllMapped(
+      RegExp(r'(\s+)GraphQLClient\s+_graphQLClient\)?\s*$', multiLine: true),
+      (match) {
+        final indent = match.group(1) ?? '';
+        return '${indent}{{#has_graphql}}GraphQLClient _graphQLClient{{/has_graphql}})';
+      },
+    );
+
+    // 주석 변환
+    // /// REST API를 통해 실제 백엔드와 통신
+    result = result.replaceAllMapped(
+      RegExp(
+        r'^(\s*)///\s*REST\s+API를\s+통해\s+실제\s+백엔드와\s+통신\s*$',
+        multiLine: true,
+      ),
+      (match) {
+        final indent = match.group(1) ?? '';
+        return '${indent}{{#has_openapi}}/// REST API를 통해 실제 백엔드와 통신{{/has_openapi}}';
+      },
+    );
+
+    // /// Serverpod Client를 통해 실제 백엔드 API와 통신
+    result = result.replaceAllMapped(
+      RegExp(
+        r'^(\s*)///\s*Serverpod\s+Client를\s+통해\s+실제\s+백엔드\s+API와\s+통신\s*$',
+        multiLine: true,
+      ),
+      (match) {
+        final indent = match.group(1) ?? '';
+        return '${indent}{{#has_serverpod}}/// Serverpod Client를 통해 실제 백엔드 API와 통신{{/has_serverpod}}';
+      },
+    );
+
+    // /// GraphQL을 통해 실제 백엔드와 통신
+    result = result.replaceAllMapped(
+      RegExp(
+        r'^(\s*)///\s*GraphQL을\s+통해\s+실제\s+백엔드와\s+통신\s*$',
+        multiLine: true,
+      ),
+      (match) {
+        final indent = match.group(1) ?? '';
+        return '${indent}{{#has_graphql}}/// GraphQL을 통해 실제 백엔드와 통신{{/has_graphql}}';
+      },
+    );
+
+    // /// 메모리에서 데이터를 생성하고 관리
+    result = result.replaceAllMapped(
+      RegExp(r'^(\s*)///\s*메모리에서\s+데이터를\s+생성하고\s+관리\s*$', multiLine: true),
+      (match) {
+        final indent = match.group(1) ?? '';
+        return '${indent}{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}/// 메모리에서 데이터를 생성하고 관리{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}';
+      },
+    );
+    
+    // 생성자 주석 변환
+    // /// Home Repository 생성자
+    result = result.replaceAllMapped(
+      RegExp(r'^(\s*)///\s*(\w+)\s+Repository\s+생성자\s*$', multiLine: true),
+      (match) {
+        final indent = match.group(1) ?? '';
+        final repoName = match.group(2) ?? '';
+        // 생성자 주석은 모든 조건부 템플릿 블록 앞에 위치해야 함
+        // 실제로는 생성자 변환 후에 처리되므로 여기서는 그대로 유지
+        return '${indent}/// $repoName Repository 생성자';
+      },
+    );
+
+    // 생성자 변환 (복잡한 패턴)
+    // HomeRepository(this._openApiService, this._feedItemDao, this._bannerDao);
+    // -> {{#has_openapi}}HomeRepository(this._openApiService, this._feedItemDao, this._bannerDao);{{/has_openapi}}
+    result = _convertRepositoryConstructor(result);
+
+    return result;
+  }
+
+  /// Repository 생성자를 조건부 템플릿으로 변환
+  String _convertRepositoryConstructor(String content) {
+    var result = content;
+
+    // 생성자 패턴 찾기 (여러 줄에 걸친 생성자)
+    // HomeRepository(
+    //   this._openApiService,
+    //   this._feedItemDao,
+    //   this._bannerDao,
+    // );
+
+    // OpenAPI 생성자 패턴
+    final openApiConstructorPattern = RegExp(
+      r'^(\s*)(\w+Repository)\(\s*this\._openApiService[^)]*\);\s*$',
+      multiLine: true,
+      dotAll: true,
+    );
+
+    // Serverpod 생성자 패턴
+    final serverpodConstructorPattern = RegExp(
+      r'^(\s*)(\w+Repository)\(\s*this\._podService[^)]*\);\s*$',
+      multiLine: true,
+      dotAll: true,
+    );
+
+    // GraphQL 생성자 패턴
+    final graphqlConstructorPattern = RegExp(
+      r'^(\s*)(\w+Repository)\(this\._graphQLClient\);\s*$',
+      multiLine: true,
+    );
+
+    // 빈 생성자 패턴
+    final emptyConstructorPattern = RegExp(
+      r'^(\s*)(\w+Repository)\(\);\s*$',
+      multiLine: true,
+    );
+
+    // 각 패턴을 조건부 템플릿으로 변환
+    // OpenAPI 생성자 변환 (여러 줄 지원)
+    result = result.replaceAllMapped(openApiConstructorPattern, (match) {
+      final fullMatch = match.group(0) ?? '';
+      final indent = match.group(1) ?? '';
+      final className = match.group(2) ?? '';
+
+      // 생성자 본문 추출 (괄호 안의 내용)
+      final constructorStart = fullMatch.indexOf('(');
+      final constructorEnd = fullMatch.lastIndexOf(')');
+      if (constructorStart != -1 && constructorEnd != -1) {
+        final constructorBody = fullMatch.substring(
+          constructorStart + 1,
+          constructorEnd,
+        );
+        // 여러 줄 생성자 처리
+        final bodyLines = constructorBody.split('\n');
+        final indentedBody = bodyLines
+            .map((line) {
+              final trimmed = line.trim();
+              if (trimmed.isEmpty) return '';
+              // 이미 인덴트가 있으면 유지, 없으면 추가
+              if (line.startsWith(' ')) {
+                return line;
+              }
+              return '$indent  $trimmed';
+            })
+            .where((line) => line.isNotEmpty)
+            .join('\n');
+
+        return '${indent}{{#has_openapi}}\n$indent$className(\n$indentedBody\n$indent);\n${indent}{{/has_openapi}}';
+      }
+      return fullMatch;
+    });
+
+    // Serverpod 생성자 변환 (여러 줄 지원)
+    result = result.replaceAllMapped(serverpodConstructorPattern, (match) {
+      final fullMatch = match.group(0) ?? '';
+      final indent = match.group(1) ?? '';
+      final className = match.group(2) ?? '';
+
+      // 생성자 본문 추출 (괄호 안의 내용)
+      final constructorStart = fullMatch.indexOf('(');
+      final constructorEnd = fullMatch.lastIndexOf(')');
+      if (constructorStart != -1 && constructorEnd != -1) {
+        final constructorBody = fullMatch.substring(
+          constructorStart + 1,
+          constructorEnd,
+        );
+        // 여러 줄 생성자 처리
+        final bodyLines = constructorBody.split('\n');
+        final indentedBody = bodyLines
+            .map((line) {
+              final trimmed = line.trim();
+              if (trimmed.isEmpty) return '';
+              // 이미 인덴트가 있으면 유지, 없으면 추가
+              if (line.startsWith(' ')) {
+                return line;
+              }
+              return '$indent  $trimmed';
+            })
+            .where((line) => line.isNotEmpty)
+            .join('\n');
+
+        return '${indent}{{#has_serverpod}}\n$indent$className(\n$indentedBody\n$indent);\n${indent}{{/has_serverpod}}';
+      }
+      return fullMatch;
+    });
+
+    // GraphQL 생성자 변환 (한 줄)
+    result = result.replaceAllMapped(graphqlConstructorPattern, (match) {
+      final indent = match.group(1) ?? '';
+      final className = match.group(2) ?? '';
+      return '${indent}{{#has_graphql}}\n$indent$className(this._graphQLClient);\n${indent}{{/has_graphql}}';
+    });
+
+    // 빈 생성자 변환
+    result = result.replaceAllMapped(emptyConstructorPattern, (match) {
+      final indent = match.group(1) ?? '';
+      final className = match.group(2) ?? '';
+      return '${indent}{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}\n$indent$className();\n${indent}{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}';
     });
 
     return result;
