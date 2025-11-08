@@ -507,13 +507,15 @@ class TemplateConverter {
       // Mason 케이스 변환 함수에 맞춘 패턴 생성
       // 패턴 순서: 더 구체적인 패턴부터 일반적인 패턴 순서로
 
-      // 1. Pascal case (HelloWorld) - suffix가 있는 패턴 먼저
+      // 1. Pascal case (HelloWorld) - suffix가 있는 패턴 먼저 (더 구체적인 순서)
+      // ServiceModule, HttpModule 같은 복합 suffix를 먼저 처리
       for (final suffix in [
+        'ServiceModule',
+        'HttpModule',
         'App',
         'Console',
         'Widgetbook',
         'Service',
-        'HttpModule',
       ]) {
         patterns.add(
           ReplacementPattern(
@@ -522,7 +524,7 @@ class TemplateConverter {
           ),
         );
       }
-      // Pascal case 단독 패턴
+      // Pascal case 단독 패턴 (가장 마지막에 처리)
       patterns.add(
         ReplacementPattern(
           RegExp('\\b${_escapeRegex(basePascal)}\\b'),
@@ -532,11 +534,12 @@ class TemplateConverter {
 
       // 2. Camel case (helloWorld) - suffix가 있는 패턴 먼저
       for (final suffix in [
+        'ServiceModule',
+        'HttpModule',
         'App',
         'Console',
         'Widgetbook',
         'Service',
-        'HttpModule',
       ]) {
         patterns.add(
           ReplacementPattern(

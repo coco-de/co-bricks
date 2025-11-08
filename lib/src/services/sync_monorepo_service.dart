@@ -128,9 +128,67 @@ class SyncMonorepoService {
       }
     }
 
+    // openapi와 openapi_service 브릭 동기화
+    await _syncOpenApiBricks(templateDir, bricksDir, config);
+
     logger.info('\n${'=' * 60}');
     logger.info('🎉 Monorepo brick synced successfully!');
     logger.info('${'=' * 60}');
+  }
+
+  /// openapi와 openapi_service 브릭 동기화
+  Future<void> _syncOpenApiBricks(
+    Directory templateDir,
+    Directory bricksDir,
+    ProjectConfig config,
+  ) async {
+    final openApiBricks = ['openapi', 'openapi_service'];
+
+    for (final brickName in openApiBricks) {
+      final sourceDir = Directory(path.join(templateDir.path, 'package', brickName));
+      final targetBrickDir = Directory(path.join(bricksDir.path, brickName));
+
+      if (!sourceDir.existsSync()) {
+        continue;
+      }
+
+      if (!targetBrickDir.existsSync()) {
+        logger.warn('\n⚠️  Target brick not found: ${targetBrickDir.path}, skipping...');
+        continue;
+      }
+
+      final targetDir = Directory(path.join(targetBrickDir.path, '__brick__', brickName));
+
+      logger.info('\n📦 Syncing $brickName brick...');
+
+      // 타겟 디렉토리 생성
+      targetDir.createSync(recursive: true);
+
+      logger.info('   📋 Updating files from template...');
+
+      // 디렉토리 복사
+      await FileUtils.copyDirectory(sourceDir, targetDir, overwrite: true);
+
+      // Android Kotlin 디렉토리 경로 변환
+      logger.info('   🔄 Converting Android Kotlin directory paths...');
+      await FileUtils.convertAndroidKotlinPaths(targetDir, config.projectNames);
+
+      // 템플릿 변환
+      logger.info('   🔄 Converting to template variables...');
+
+      final patterns = TemplateConverter.buildPatterns(config);
+      var convertedFiles = 0;
+
+      // 디렉토리 이름 변환
+      await _convertDirectoryNames(targetDir, config, 0);
+
+      // 파일 처리
+      final stats = await _processFiles(targetDir, config, patterns);
+      convertedFiles = stats['converted'] as int;
+
+      logger.info('   ✅ $brickName brick synced:');
+      logger.info('      • $convertedFiles files converted');
+    }
   }
 
   /// 디렉토리 동기화
@@ -142,12 +200,8 @@ class SyncMonorepoService {
   ) async {
     logger.info('\n📁 Syncing $dirName...');
 
-    // package/openapi와 package/openapi_service는 별도 브릭으로 관리되므로 제외
-    if (sourceDir.path.contains('package/openapi') ||
-        sourceDir.path.contains('package/openapi_service')) {
-      logger.info('   ⏭️  Skipping $dirName (managed by separate bricks)');
-      return;
-    }
+    // package/openapi와 package/openapi_service는 monorepo 브릭에도 포함
+    // 별도 브릭으로도 관리되지만, monorepo 브릭에도 동기화 필요
 
     // 타겟 디렉토리 생성
     targetDir.createSync(recursive: true);
