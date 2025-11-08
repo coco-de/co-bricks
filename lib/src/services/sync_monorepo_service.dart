@@ -743,7 +743,9 @@ class SyncMonorepoService {
     // 클래스 정보 추출
     String? className;
     String? mixinPrefix;
-    final daoFields = <String>[];
+    String? databaseField;
+    String? databaseType;
+    final daoGetters = <Map<String, String>>[];  // {getterName: 'postDao', daoType: 'PostDao', sourcePath: '_database.postDao'}
 
     // 나머지 파일을 스캔해서 정보 수집
     for (var j = i; j < lines.length; j++) {
@@ -757,16 +759,35 @@ class SyncMonorepoService {
 
       // Mixin 이름
       if (line.contains('with') && line.contains('Mixin')) {
-        final match = RegExp(r'with\s+(\w+)(Openapi|Serverpod|Graphql)Mixin').firstMatch(line);
+        final match = RegExp(r'with\s+(\w+)(Openapi|Serverpod|Graphql|Supabase|Firebase)Mixin').firstMatch(line);
         mixinPrefix = match?.group(1);
       }
 
-      // DAO 필드
-      if (line.contains('final') && line.contains('Dao')) {
-        final match = RegExp(r'final\s+\w+\s+(_\w+Dao);').firstMatch(line);
-        final dao = match?.group(1);
-        if (dao != null && !daoFields.contains(dao)) {
-          daoFields.add(dao);
+      // Database 필드 (예: final CommunityDatabase _database;)
+      if (line.contains('final') && line.contains('Database') && line.contains('_database')) {
+        final match = RegExp(r'final\s+(\w+Database)\s+(_database);').firstMatch(line);
+        if (match != null) {
+          databaseType = match.group(1);
+          databaseField = match.group(2);
+        }
+      }
+
+      // DAO getter (예: PostDao get postDao => _database.postDao;)
+      if (line.contains('get') && line.contains('Dao') && line.contains('=>')) {
+        final match = RegExp(r'(\w+Dao)\s+get\s+(\w+)\s+=>\s+_database\.(\w+);').firstMatch(line);
+        if (match != null) {
+          final daoType = match.group(1)!;
+          final getterName = match.group(2)!;
+          final sourcePath = match.group(3)!;
+
+          // 중복 체크
+          if (!daoGetters.any((dao) => dao['getterName'] == getterName)) {
+            daoGetters.add({
+              'getterName': getterName,
+              'daoType': daoType,
+              'sourcePath': sourcePath,
+            });
+          }
         }
       }
     }
@@ -791,7 +812,9 @@ class SyncMonorepoService {
       docComment: '',  // 이미 추가됨
       className: className,
       mixinPrefix: mixinPrefix,
-      daoFields: daoFields,
+      databaseField: databaseField,
+      databaseType: databaseType,
+      daoGetters: daoGetters,
     );
 
     // @LazySingleton부터의 템플릿 추가
@@ -815,9 +838,12 @@ class SyncMonorepoService {
     required String docComment,
     required String className,
     required String mixinPrefix,
-    required List<String> daoFields,
+    String? databaseField,
+    String? databaseType,
+    required List<Map<String, String>> daoGetters,
   }) {
     final buffer = StringBuffer();
+    final hasDatabase = databaseField != null && databaseType != null && daoGetters.isNotEmpty;
 
     // 문서 주석
     buffer.writeln(docComment.trimRight());
@@ -844,30 +870,24 @@ class SyncMonorepoService {
     // Serverpod 블록
     buffer.writeln('  {{#has_serverpod}}');
     buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
-    buffer.write('  $className(');
-    if (daoFields.isNotEmpty) {
-      buffer.writeln();
+    if (hasDatabase) {
+      buffer.writeln('  $className(');
       buffer.writeln('    this._podService,');
-      for (final dao in daoFields) {
-        buffer.writeln('    this.$dao,');
-      }
-      buffer.write('  ');
-    }
-    buffer.writeln(');');
-    buffer.writeln('  final pod.PodService _podService;');
-    for (final dao in daoFields) {
-      final daoType = dao.substring(1, 2).toUpperCase() + dao.substring(2);
-      buffer.writeln('  final $daoType $dao;');
+      buffer.writeln('    this.$databaseField,');
+      buffer.writeln('  );');
+      buffer.writeln('  final pod.PodService _podService;');
+      buffer.writeln('  final $databaseType $databaseField;');
+    } else {
+      buffer.writeln('  $className();');
+      buffer.writeln('  final pod.PodService _podService;');
     }
     buffer.writeln();
     buffer.writeln('  @override');
     buffer.writeln('  pod.Client get client => _podService.client;');
     buffer.writeln();
-    for (final dao in daoFields) {
-      final daoType = dao.substring(1, 2).toUpperCase() + dao.substring(2);
-      final getterName = dao.substring(1);
+    for (final dao in daoGetters) {
       buffer.writeln('  @override');
-      buffer.writeln('  $daoType get $getterName => $dao;');
+      buffer.writeln('  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};');
       buffer.writeln();
     }
     buffer.writeln('  {{/has_serverpod}}');
@@ -875,30 +895,26 @@ class SyncMonorepoService {
     // OpenAPI 블록
     buffer.writeln('  {{#has_openapi}}');
     buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
-    buffer.write('  $className(');
-    if (daoFields.isNotEmpty) {
-      buffer.writeln();
+    if (hasDatabase) {
+      buffer.writeln('  $className(');
       buffer.writeln('    this._openApiService,');
-      for (final dao in daoFields) {
-        buffer.writeln('    this.$dao,');
-      }
-      buffer.write('  ');
-    }
-    buffer.writeln(');');
-    buffer.writeln('  final OpenApiService _openApiService;');
-    for (final dao in daoFields) {
-      final daoType = dao.substring(1, 2).toUpperCase() + dao.substring(2);
-      buffer.writeln('  final $daoType $dao;');
+      buffer.writeln('    this.$databaseField,');
+      buffer.writeln('  );');
+      buffer.writeln('  final OpenApiService _openApiService;');
+      buffer.writeln('  final $databaseType $databaseField;');
+    } else {
+      buffer.writeln('  $className(');
+      buffer.writeln('    this._openApiService,');
+      buffer.writeln('  );');
+      buffer.writeln('  final OpenApiService _openApiService;');
     }
     buffer.writeln();
     buffer.writeln('  @override');
     buffer.writeln('  OpenApiService get openApiService => _openApiService;');
     buffer.writeln();
-    for (final dao in daoFields) {
-      final daoType = dao.substring(1, 2).toUpperCase() + dao.substring(2);
-      final getterName = dao.substring(1);
+    for (final dao in daoGetters) {
       buffer.writeln('  @override');
-      buffer.writeln('  $daoType get $getterName => $dao;');
+      buffer.writeln('  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};');
       buffer.writeln();
     }
     buffer.writeln('  {{/has_openapi}}');
@@ -906,31 +922,73 @@ class SyncMonorepoService {
     // GraphQL 블록
     buffer.writeln('  {{#has_graphql}}');
     buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
-    buffer.writeln('  $className(this._graphQLClient);');
-    buffer.writeln('  final GraphQLClient _graphQLClient;');
+    if (hasDatabase) {
+      buffer.writeln('  $className(');
+      buffer.writeln('    this._graphQLClient,');
+      buffer.writeln('    this.$databaseField,');
+      buffer.writeln('  );');
+      buffer.writeln('  final GraphQLClient _graphQLClient;');
+      buffer.writeln('  final $databaseType $databaseField;');
+    } else {
+      buffer.writeln('  $className(this._graphQLClient);');
+      buffer.writeln('  final GraphQLClient _graphQLClient;');
+    }
     buffer.writeln('  ');
     buffer.writeln('  @override');
     buffer.writeln('  GraphQLClient get graphQLClient => _graphQLClient;');
+    for (final dao in daoGetters) {
+      buffer.writeln();
+      buffer.writeln('  @override');
+      buffer.writeln('  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};');
+    }
     buffer.writeln('  {{/has_graphql}}');
 
     // Supabase 블록
     buffer.writeln('  {{#has_supabase}}');
     buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
-    buffer.writeln('  $className(this._supabaseClient);');
-    buffer.writeln('  final SupabaseClient _supabaseClient;');
+    if (hasDatabase) {
+      buffer.writeln('  $className(');
+      buffer.writeln('    this._supabaseClient,');
+      buffer.writeln('    this.$databaseField,');
+      buffer.writeln('  );');
+      buffer.writeln('  final SupabaseClient _supabaseClient;');
+      buffer.writeln('  final $databaseType $databaseField;');
+    } else {
+      buffer.writeln('  $className(this._supabaseClient);');
+      buffer.writeln('  final SupabaseClient _supabaseClient;');
+    }
     buffer.writeln('  ');
     buffer.writeln('  @override');
     buffer.writeln('  SupabaseClient get supabaseClient => _supabaseClient;');
+    for (final dao in daoGetters) {
+      buffer.writeln();
+      buffer.writeln('  @override');
+      buffer.writeln('  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};');
+    }
     buffer.writeln('  {{/has_supabase}}');
 
     // Firebase 블록
     buffer.writeln('  {{#has_firebase}}');
     buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
-    buffer.writeln('  $className(this._firebaseService);');
-    buffer.writeln('  final FirebaseService _firebaseService;');
+    if (hasDatabase) {
+      buffer.writeln('  $className(');
+      buffer.writeln('    this._firebaseService,');
+      buffer.writeln('    this.$databaseField,');
+      buffer.writeln('  );');
+      buffer.writeln('  final FirebaseService _firebaseService;');
+      buffer.writeln('  final $databaseType $databaseField;');
+    } else {
+      buffer.writeln('  $className(this._firebaseService);');
+      buffer.writeln('  final FirebaseService _firebaseService;');
+    }
     buffer.writeln('  ');
     buffer.writeln('  @override');
     buffer.writeln('  FirebaseService get firebaseService => _firebaseService;');
+    for (final dao in daoGetters) {
+      buffer.writeln();
+      buffer.writeln('  @override');
+      buffer.writeln('  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};');
+    }
     buffer.writeln('  {{/has_firebase}}');
 
     // Fallback (no network) 블록
