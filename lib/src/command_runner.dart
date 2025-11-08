@@ -37,6 +37,7 @@ class CoBricksCommandRunner extends CompletionCommandRunner<int> {
       );
 
     // Add sub commands
+    addCommand(CreateCommand(logger: _logger, generator: null));
     addCommand(SampleCommand(logger: _logger));
     addCommand(SyncCommand(logger: _logger));
     addCommand(UpdateCommand(logger: _logger, pubUpdater: _pubUpdater));
