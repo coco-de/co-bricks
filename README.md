@@ -1,4 +1,4 @@
-## co_bricks
+## co-bricks
 
 ![coverage][coverage_badge]
 [![style: very good analysis][very_good_analysis_badge]][very_good_analysis_link]
@@ -40,7 +40,7 @@ dart pub global activate --source path /absolute/path/to/co-bricks
 [pub.dev](https://pub.dev)에 배포되면 다음 명령어로 전역 활성화할 수 있습니다:
 
 ```sh
-dart pub global activate co_bricks
+dart pub global activate co-bricks
 ```
 
 ### 설치 확인
@@ -48,16 +48,16 @@ dart pub global activate co_bricks
 활성화 후 설치를 확인하세요:
 
 ```sh
-# co_bricks가 설치되었는지 확인
-dart pub global list | grep co_bricks
+# co-bricks가 설치되었는지 확인
+dart pub global list | grep co-bricks
 
 # CLI 테스트
-co_bricks --help
+co-bricks --help
 ```
 
 ### PATH 설정
 
-활성화 후 `co_bricks` 명령어를 찾을 수 없는 경우, pub cache bin 디렉토리를 PATH에 추가하세요:
+활성화 후 `co-bricks` 명령어를 찾을 수 없는 경우, pub cache bin 디렉토리를 PATH에 추가하세요:
 
 **zsh 사용 시 (macOS/Linux):**
 ```sh
@@ -77,33 +77,33 @@ source ~/.bashrc
 
 ```sh
 # App 브릭 동기화 (현재 디렉토리에서 .envrc 자동 탐지)
-$ co_bricks sync --type app
+$ co-bricks sync --type app
 
 # 특정 프로젝트 디렉토리에서 App 브릭 동기화
-$ co_bricks sync --type app --project-dir /path/to/project
+$ co-bricks sync --type app --project-dir /path/to/project
 ```
 
 ### Monorepo 브릭 동기화
 
 ```sh
 # Monorepo 브릭 동기화 (현재 디렉토리에서 .envrc 자동 탐지)
-$ co_bricks sync --type monorepo
+$ co-bricks sync --type monorepo
 
 # 특정 프로젝트 디렉토리에서 Monorepo 브릭 동기화
-$ co_bricks sync --type monorepo --project-dir /path/to/project
+$ co-bricks sync --type monorepo --project-dir /path/to/project
 ```
 
 ### 기타 명령어
 
 ```sh
 # CLI 버전 확인
-$ co_bricks --version
+$ co-bricks --version
 
 # 사용법 도움말 표시
-$ co_bricks --help
+$ co-bricks --help
 
 # sync 명령어 도움말 표시
-$ co_bricks sync --help
+$ co-bricks sync --help
 ```
 
 ## 작동 방식
