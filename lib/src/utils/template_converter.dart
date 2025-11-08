@@ -276,8 +276,17 @@ class TemplateConverter {
           .map((word) => word[0].toUpperCase() + word.substring(1))
           .join(' ');
 
-      // 복합 이름 패턴
-      for (final suffix in ['_server', '_client', '_widgetbook', '_console']) {
+      // 복합 이름 패턴 (더 긴 suffix를 먼저 처리)
+      for (final suffix in [
+        '_http_module',
+        '_service_module',
+        '_server',
+        '_client',
+        '_widgetbook',
+        '_console',
+        '_service',
+        '_module',
+      ]) {
         patterns.add(
           ReplacementPattern(
             RegExp('\\b${_escapeRegex(baseSnake)}$suffix\\b'),
@@ -508,6 +517,58 @@ class TemplateConverter {
       // 패턴 순서: 더 구체적인 패턴부터 일반적인 패턴 순서로
 
       // 1. Pascal case (HelloWorld) - suffix가 있는 패턴 먼저 (더 구체적인 순서)
+      // Mock 클래스 패턴 (_FakeGoodTeacherService_0)
+      for (final suffix in [
+        'Service',
+        'Repository',
+        'Client',
+        'Api',
+        'Module',
+      ]) {
+        // _Fake + PascalCase + Suffix + _숫자
+        patterns.add(
+          ReplacementPattern(
+            RegExp('_Fake${_escapeRegex(basePascal)}$suffix' + r'(_\d+)\b'),
+            '_Fake{{project_name.pascalCase()}}$suffix' + r'$1',
+          ),
+        );
+      }
+
+      // 함수명 prefix 패턴 먼저 처리 (create, get, set, build, make 등)
+      for (final prefix in [
+        'create',
+        'get',
+        'set',
+        'build',
+        'make',
+        'init',
+        'setup',
+        'configure',
+      ]) {
+        for (final suffix in [
+          'ServiceModule',
+          'HttpModule',
+          'Service',
+          'App',
+          'Console',
+          'Widgetbook',
+        ]) {
+          patterns.add(
+            ReplacementPattern(
+              RegExp('$prefix${_escapeRegex(basePascal)}$suffix\\b'),
+              '$prefix{{project_name.pascalCase()}}$suffix',
+            ),
+          );
+        }
+        // prefix + PascalCase 단독 (suffix 없음)
+        patterns.add(
+          ReplacementPattern(
+            RegExp('$prefix${_escapeRegex(basePascal)}\\b'),
+            '$prefix{{project_name.pascalCase()}}',
+          ),
+        );
+      }
+
       // ServiceModule, HttpModule 같은 복합 suffix를 먼저 처리
       for (final suffix in [
         'ServiceModule',
@@ -533,6 +594,34 @@ class TemplateConverter {
       );
 
       // 2. Camel case (helloWorld) - suffix가 있는 패턴 먼저
+      // 함수명 prefix 패턴도 처리
+      for (final prefix in [
+        'create',
+        'get',
+        'set',
+        'build',
+        'make',
+        'init',
+        'setup',
+        'configure',
+      ]) {
+        for (final suffix in [
+          'ServiceModule',
+          'HttpModule',
+          'Service',
+          'App',
+          'Console',
+          'Widgetbook',
+        ]) {
+          patterns.add(
+            ReplacementPattern(
+              RegExp('\\b$prefix${_escapeRegex(baseCamel)}$suffix\\b'),
+              '$prefix{{project_name.camelCase()}}$suffix',
+            ),
+          );
+        }
+      }
+
       for (final suffix in [
         'ServiceModule',
         'HttpModule',

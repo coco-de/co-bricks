@@ -128,72 +128,89 @@ class SyncMonorepoService {
       }
     }
 
-    // openapi와 openapi_service 브릭 동기화
-    await _syncOpenApiBricks(templateDir, bricksDir, config);
+    // 네트워크별 브릭 동기화 (openapi, graphql, serverpod)
+    await _syncNetworkBricks(templateDir, bricksDir, config);
 
     logger.info('\n${'=' * 60}');
     logger.info('🎉 Monorepo brick synced successfully!');
     logger.info('${'=' * 60}');
   }
 
-  /// openapi와 openapi_service 브릭 동기화
-  Future<void> _syncOpenApiBricks(
+  /// 네트워크별 브릭 동기화 (openapi, graphql, serverpod)
+  Future<void> _syncNetworkBricks(
     Directory templateDir,
     Directory bricksDir,
     ProjectConfig config,
   ) async {
-    final openApiBricks = ['openapi', 'openapi_service'];
+    // 네트워크 타입별 브릭 매핑
+    final networkBricks = {
+      'openapi': ['openapi', 'openapi_service'],
+      'graphql': ['graphql', 'graphql_service'],
+      'serverpod': ['serverpod', 'serverpod_service'],
+    };
 
-    for (final brickName in openApiBricks) {
-      final sourceDir = Directory(
-        path.join(templateDir.path, 'package', brickName),
-      );
-      final targetBrickDir = Directory(path.join(bricksDir.path, brickName));
+    for (final entry in networkBricks.entries) {
+      final networkType = entry.key;
+      final brickNames = entry.value;
 
-      if (!sourceDir.existsSync()) {
-        continue;
-      }
-
-      if (!targetBrickDir.existsSync()) {
-        logger.warn(
-          '\n⚠️  Target brick not found: ${targetBrickDir.path}, skipping...',
+      for (final brickName in brickNames) {
+        final sourceDir = Directory(
+          path.join(templateDir.path, 'package', brickName),
         );
-        continue;
+
+        // 소스가 없으면 건너뛰기
+        if (!sourceDir.existsSync()) {
+          continue;
+        }
+
+        // 타겟 브릭 디렉토리 (bricks/openapi, bricks/graphql 등)
+        final targetBrickDir = Directory(path.join(bricksDir.path, brickName));
+
+        if (!targetBrickDir.existsSync()) {
+          logger.warn(
+            '\n⚠️  Target brick not found: ${targetBrickDir.path}, creating...',
+          );
+          targetBrickDir.createSync(recursive: true);
+        }
+
+        // 브릭 내부 __brick__ 디렉토리
+        final targetDir = Directory(
+          path.join(targetBrickDir.path, '__brick__', brickName),
+        );
+
+        logger.info('\n📦 Syncing $brickName brick ($networkType)...');
+
+        // 타겟 디렉토리 생성
+        targetDir.createSync(recursive: true);
+
+        logger.info('   📋 Updating files from template...');
+
+        // 디렉토리 복사
+        await FileUtils.copyDirectory(sourceDir, targetDir, overwrite: true);
+
+        // Android Kotlin 디렉토리 경로 변환
+        logger.info('   🔄 Converting Android Kotlin directory paths...');
+        await FileUtils.convertAndroidKotlinPaths(
+          targetDir,
+          config.projectNames,
+        );
+
+        // 템플릿 변환
+        logger.info('   🔄 Converting to template variables...');
+
+        final patterns = TemplateConverter.buildPatterns(config);
+        var convertedFiles = 0;
+
+        // 디렉토리 이름 변환
+        await _convertDirectoryNames(targetDir, config, 0);
+
+        // 파일 처리
+        final stats = await _processFiles(targetDir, config, patterns);
+        convertedFiles = stats['converted'] as int;
+
+        logger.info('   ✅ $brickName brick synced:');
+        logger.info('      • $convertedFiles files converted');
       }
-
-      final targetDir = Directory(
-        path.join(targetBrickDir.path, '__brick__', brickName),
-      );
-
-      logger.info('\n📦 Syncing $brickName brick...');
-
-      // 타겟 디렉토리 생성
-      targetDir.createSync(recursive: true);
-
-      logger.info('   📋 Updating files from template...');
-
-      // 디렉토리 복사
-      await FileUtils.copyDirectory(sourceDir, targetDir, overwrite: true);
-
-      // Android Kotlin 디렉토리 경로 변환
-      logger.info('   🔄 Converting Android Kotlin directory paths...');
-      await FileUtils.convertAndroidKotlinPaths(targetDir, config.projectNames);
-
-      // 템플릿 변환
-      logger.info('   🔄 Converting to template variables...');
-
-      final patterns = TemplateConverter.buildPatterns(config);
-      var convertedFiles = 0;
-
-      // 디렉토리 이름 변환
-      await _convertDirectoryNames(targetDir, config, 0);
-
-      // 파일 처리
-      final stats = await _processFiles(targetDir, config, patterns);
-      convertedFiles = stats['converted'] as int;
-
-      logger.info('   ✅ $brickName brick synced:');
-      logger.info('      • $convertedFiles files converted');
     }
   }
 
@@ -206,9 +223,6 @@ class SyncMonorepoService {
   ) async {
     logger.info('\n📁 Syncing $dirName...');
 
-    // package/openapi와 package/openapi_service는 monorepo 브릭에도 포함
-    // 별도 브릭으로도 관리되지만, monorepo 브릭에도 동기화 필요
-
     // 타겟 디렉토리 생성
     targetDir.createSync(recursive: true);
 
@@ -216,6 +230,26 @@ class SyncMonorepoService {
 
     // 디렉토리 복사
     await FileUtils.copyDirectory(sourceDir, targetDir, overwrite: true);
+
+    // package 디렉토리의 경우, 네트워크 브릭들은 별도 브릭으로 관리하므로 monorepo에서 제외
+    if (dirName == 'package') {
+      final networkBricks = [
+        'openapi',
+        'openapi_service',
+        'graphql',
+        'graphql_service',
+        'serverpod',
+        'serverpod_service',
+      ];
+
+      for (final brickName in networkBricks) {
+        final brickDir = Directory(path.join(targetDir.path, brickName));
+        if (brickDir.existsSync()) {
+          logger.info('   🗑️  Removing $brickName from monorepo (managed as separate brick)...');
+          await brickDir.delete(recursive: true);
+        }
+      }
+    }
 
     // Android Kotlin 디렉토리 경로 변환
     logger.info('   🔄 Converting Android Kotlin directory paths...');
@@ -322,10 +356,13 @@ class SyncMonorepoService {
           conditionalDir = '{{#has_graphql}}$newFileName{{';
           finalFileName = 'has_graphql}}';
         }
-        
+
         // conditionalDir에 실제 파일명이 들어가도록 문자열 보간 적용
         if (conditionalDir != null) {
-          conditionalDir = conditionalDir.replaceAll('\$newFileName', newFileName);
+          conditionalDir = conditionalDir.replaceAll(
+            '\$newFileName',
+            newFileName,
+          );
         }
 
         // 파일 내용 변환 (파일 이동 전에 수행)
@@ -428,79 +465,46 @@ class SyncMonorepoService {
   }
 
   /// mixins.dart 파일의 export 문을 조건부 템플릿으로 변환
+  /// Repository와 동일하게 모든 네트워크 타입의 export를 생성
   String _convertMixinsExports(String content) {
-    var result = content;
-
     // 이미 조건부 템플릿이 포함되어 있으면 변환하지 않음
-    if (result.contains('{{#has_openapi}}') ||
-        result.contains('{{#has_serverpod}}') ||
-        result.contains('{{#has_graphql}}')) {
-      return result;
+    if (content.contains('{{#has_openapi}}') ||
+        content.contains('{{#has_serverpod}}') ||
+        content.contains('{{#has_graphql}}')) {
+      return content;
     }
 
-    // _openapi_mixin.dart export 문을 조건부 템플릿으로 감싸기
-    // 작은따옴표와 큰따옴표 모두 지원
-    // 주의: \s 대신 [ \t]를 사용하여 개행 문자가 indent에 포함되지 않도록 함
-    final openapiPatternSingle = RegExp(
-      r"^([ \t]*)export\s+'(.+?_openapi_mixin\.dart)';?\s*$",
+    // export 문에서 feature/module 이름 추출
+    // 예: export 'community_openapi_mixin.dart'; -> community
+    final exportPattern = RegExp(
+      r'''export\s+['"](\w+)_(openapi|serverpod|graphql)_mixin\.dart['"];?''',
       multiLine: true,
     );
-    final openapiPatternDouble = RegExp(
-      r'^([ \t]*)export\s+"(.+?_openapi_mixin\.dart)";?\s*$',
-      multiLine: true,
-    );
-    result = result.replaceAllMapped(openapiPatternSingle, (match) {
-      final indent = match.group(1) ?? '';
-      final filePath = match.group(2) ?? '';
-      return '${indent}{{#has_openapi}}\n${indent}export \'$filePath\';\n${indent}{{/has_openapi}}';
-    });
-    result = result.replaceAllMapped(openapiPatternDouble, (match) {
-      final indent = match.group(1) ?? '';
-      final filePath = match.group(2) ?? '';
-      return '${indent}{{#has_openapi}}\n${indent}export "$filePath";\n${indent}{{/has_openapi}}';
-    });
+    final match = exportPattern.firstMatch(content);
 
-    // _serverpod_mixin.dart export 문을 조건부 템플릿으로 감싸기
-    final serverpodPatternSingle = RegExp(
-      r"^([ \t]*)export\s+'(.+?_serverpod_mixin\.dart)';?\s*$",
-      multiLine: true,
-    );
-    final serverpodPatternDouble = RegExp(
-      r'^([ \t]*)export\s+"(.+?_serverpod_mixin\.dart)";?\s*$',
-      multiLine: true,
-    );
-    result = result.replaceAllMapped(serverpodPatternSingle, (match) {
-      final indent = match.group(1) ?? '';
-      final filePath = match.group(2) ?? '';
-      return '${indent}{{#has_serverpod}}\n${indent}export \'$filePath\';\n${indent}{{/has_serverpod}}';
-    });
-    result = result.replaceAllMapped(serverpodPatternDouble, (match) {
-      final indent = match.group(1) ?? '';
-      final filePath = match.group(2) ?? '';
-      return '${indent}{{#has_serverpod}}\n${indent}export "$filePath";\n${indent}{{/has_serverpod}}';
-    });
+    if (match == null) {
+      // export가 없으면 원본 반환
+      return content;
+    }
 
-    // _graphql_mixin.dart export 문을 조건부 템플릿으로 감싸기
-    final graphqlPatternSingle = RegExp(
-      r"^([ \t]*)export\s+'(.+?_graphql_mixin\.dart)';?\s*$",
-      multiLine: true,
-    );
-    final graphqlPatternDouble = RegExp(
-      r'^([ \t]*)export\s+"(.+?_graphql_mixin\.dart)";?\s*$',
-      multiLine: true,
-    );
-    result = result.replaceAllMapped(graphqlPatternSingle, (match) {
-      final indent = match.group(1) ?? '';
-      final filePath = match.group(2) ?? '';
-      return '${indent}{{#has_graphql}}\n${indent}export \'$filePath\';\n${indent}{{/has_graphql}}';
-    });
-    result = result.replaceAllMapped(graphqlPatternDouble, (match) {
-      final indent = match.group(1) ?? '';
-      final filePath = match.group(2) ?? '';
-      return '${indent}{{#has_graphql}}\n${indent}export "$filePath";\n${indent}{{/has_graphql}}';
-    });
+    final prefix = match.group(1) ?? '';
 
-    return result;
+    // 모든 네트워크 타입의 export를 생성
+    final buffer = StringBuffer();
+
+    buffer.writeln('{{#has_openapi}}');
+    buffer.writeln("export '${prefix}_openapi_mixin.dart';");
+    buffer.writeln('{{/has_openapi}}');
+
+    buffer.writeln('{{#has_serverpod}}');
+    buffer.writeln("export '${prefix}_serverpod_mixin.dart';");
+    buffer.writeln('{{/has_serverpod}}');
+
+    buffer.writeln('{{#has_graphql}}');
+    buffer.writeln("export '${prefix}_graphql_mixin.dart';");
+    buffer.write('{{/has_graphql}}');
+
+    return buffer.toString();
   }
 
   /// Repository 파일의 mixin/서비스 사용 패턴을 조건부 템플릿으로 변환
@@ -513,6 +517,243 @@ class SyncMonorepoService {
         result.contains('{{#has_graphql}}')) {
       return result;
     }
+
+    // 먼저 전체 Repository 클래스를 재구성 시도
+    final convertedClass = _convertRepositoryClass(result);
+
+    // 변환이 성공했으면 (새로운 템플릿 태그가 포함되어 있으면) 반환
+    if (convertedClass.contains('{{#has_openapi}}') ||
+        convertedClass.contains('{{#has_serverpod}}') ||
+        convertedClass.contains('{{#has_graphql}}')) {
+      return convertedClass;
+    }
+
+    // 실패했으면 기존 패턴별 변환 방식 사용
+    result = _convertRepositoryPatternsLegacy(result);
+
+    return result;
+  }
+
+  /// Repository 클래스 전체를 조건부 템플릿으로 변환
+  String _convertRepositoryClass(String content) {
+    // Repository 파일이 아니면 원본 반환
+    if (!content.contains('Repository')) {
+      return content;
+    }
+
+    final lines = content.split('\n');
+    final result = <String>[];
+    var i = 0;
+
+    // Import 문들 복사
+    while (i < lines.length && (lines[i].startsWith('import') || lines[i].trim().isEmpty)) {
+      result.add(lines[i]);
+      i++;
+    }
+
+    // 문서 주석 복사 (/// 로 시작하는 처음 세 줄)
+    final docCommentLines = <String>[];
+    while (i < lines.length && lines[i].trim().startsWith('///')) {
+      docCommentLines.add(lines[i]);
+      i++;
+    }
+    result.addAll(docCommentLines);
+
+    // 빈 줄 건너뛰기
+    while (i < lines.length && lines[i].trim().isEmpty) {
+      i++;
+    }
+
+    // 네트워크 주석 건너뛰기 (/// REST API 또는 /// Serverpod 또는 /// GraphQL 등)
+    if (i < lines.length && lines[i].trim().startsWith('///')) {
+      i++; // 네트워크 주석 건너뛰기
+    }
+
+    // 빈 줄들 건너뛰기
+    while (i < lines.length && lines[i].trim().isEmpty) {
+      i++;
+    }
+
+    // 클래스 정보 추출
+    String? className;
+    String? mixinPrefix;
+    final daoFields = <String>[];
+
+    // 나머지 파일을 스캔해서 정보 수집
+    for (var j = i; j < lines.length; j++) {
+      final line = lines[j];
+
+      // 클래스 이름
+      if (line.contains('class') && line.contains('Repository')) {
+        final match = RegExp(r'class\s+(\w+Repository)').firstMatch(line);
+        className = match?.group(1);
+      }
+
+      // Mixin 이름
+      if (line.contains('with') && line.contains('Mixin')) {
+        final match = RegExp(r'with\s+(\w+)(Openapi|Serverpod|Graphql)Mixin').firstMatch(line);
+        mixinPrefix = match?.group(1);
+      }
+
+      // DAO 필드
+      if (line.contains('final') && line.contains('Dao')) {
+        final match = RegExp(r'final\s+\w+\s+(_\w+Dao);').firstMatch(line);
+        final dao = match?.group(1);
+        if (dao != null && !daoFields.contains(dao)) {
+          daoFields.add(dao);
+        }
+      }
+    }
+
+    if (className == null || mixinPrefix == null) {
+      // 정보를 추출하지 못하면 원본 반환
+      return content;
+    }
+
+    // 네트워크별 주석 추가
+    result.add('');
+    result.add('{{#has_serverpod}}/// Serverpod Client를 통해 실제 백엔드 API와 통신{{/has_serverpod}}');
+    result.add('{{#has_openapi}}/// REST API를 통해 실제 백엔드와 통신{{/has_openapi}}');
+    result.add('{{#has_graphql}}/// GraphQL을 통해 실제 백엔드와 통신{{/has_graphql}}');
+    result.add('{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}/// 메모리에서 데이터를 생성하고 관리{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}');
+    result.add('');
+
+    // 템플릿 생성
+    final template = _generateRepositoryTemplate(
+      docComment: '',  // 이미 추가됨
+      className: className,
+      mixinPrefix: mixinPrefix,
+      daoFields: daoFields,
+    );
+
+    // @LazySingleton부터의 템플릿 추가
+    final templateLines = template.split('\n');
+    // docComment와 네트워크 주석을 건너뛰고 @LazySingleton부터 추가
+    var skipLines = true;
+    for (final line in templateLines) {
+      if (line.contains('@LazySingleton')) {
+        skipLines = false;
+      }
+      if (!skipLines) {
+        result.add(line);
+      }
+    }
+
+    return result.join('\n');
+  }
+
+  /// Repository 템플릿 생성
+  String _generateRepositoryTemplate({
+    required String docComment,
+    required String className,
+    required String mixinPrefix,
+    required List<String> daoFields,
+  }) {
+    final buffer = StringBuffer();
+
+    // 문서 주석
+    buffer.writeln(docComment.trimRight());
+
+    // 네트워크별 주석
+    buffer.writeln('{{#has_serverpod}}/// Serverpod Client를 통해 실제 백엔드 API와 통신{{/has_serverpod}}');
+    buffer.writeln('{{#has_openapi}}/// REST API를 통해 실제 백엔드와 통신{{/has_openapi}}');
+    buffer.writeln('{{#has_graphql}}/// GraphQL을 통해 실제 백엔드와 통신{{/has_graphql}}');
+    buffer.writeln('{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}/// 메모리에서 데이터를 생성하고 관리{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}');
+    buffer.writeln();
+
+    final interfaceName = 'I$className';
+    buffer.writeln('@LazySingleton(as: $interfaceName)');
+    buffer.writeln('class $className ');
+    buffer.writeln('    {{#has_serverpod}}with ${mixinPrefix}ServerpodMixin{{/has_serverpod}}');
+    buffer.writeln('    {{#has_openapi}}with ${mixinPrefix}OpenapiMixin{{/has_openapi}}');
+    buffer.writeln('    {{#has_graphql}}with ${mixinPrefix}GraphqlMixin{{/has_graphql}}');
+    buffer.writeln('    implements $interfaceName {');
+
+    // Serverpod 블록
+    buffer.writeln('  {{#has_serverpod}}');
+    buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
+    buffer.write('  $className(');
+    if (daoFields.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('    this._podService,');
+      for (final dao in daoFields) {
+        buffer.writeln('    this.$dao,');
+      }
+      buffer.write('  ');
+    }
+    buffer.writeln(');');
+    buffer.writeln('  final pod.PodService _podService;');
+    for (final dao in daoFields) {
+      final daoType = dao.substring(1, 2).toUpperCase() + dao.substring(2);
+      buffer.writeln('  final $daoType $dao;');
+    }
+    buffer.writeln();
+    buffer.writeln('  @override');
+    buffer.writeln('  pod.Client get client => _podService.client;');
+    buffer.writeln();
+    for (final dao in daoFields) {
+      final daoType = dao.substring(1, 2).toUpperCase() + dao.substring(2);
+      final getterName = dao.substring(1);
+      buffer.writeln('  @override');
+      buffer.writeln('  $daoType get $getterName => $dao;');
+      buffer.writeln();
+    }
+    buffer.writeln('  {{/has_serverpod}}');
+
+    // OpenAPI 블록
+    buffer.writeln('  {{#has_openapi}}');
+    buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
+    buffer.write('  $className(');
+    if (daoFields.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('    this._openApiService,');
+      for (final dao in daoFields) {
+        buffer.writeln('    this.$dao,');
+      }
+      buffer.write('  ');
+    }
+    buffer.writeln(');');
+    buffer.writeln('  final OpenApiService _openApiService;');
+    for (final dao in daoFields) {
+      final daoType = dao.substring(1, 2).toUpperCase() + dao.substring(2);
+      buffer.writeln('  final $daoType $dao;');
+    }
+    buffer.writeln();
+    buffer.writeln('  @override');
+    buffer.writeln('  OpenApiService get openApiService => _openApiService;');
+    buffer.writeln();
+    for (final dao in daoFields) {
+      final daoType = dao.substring(1, 2).toUpperCase() + dao.substring(2);
+      final getterName = dao.substring(1);
+      buffer.writeln('  @override');
+      buffer.writeln('  $daoType get $getterName => $dao;');
+      buffer.writeln();
+    }
+    buffer.writeln('  {{/has_openapi}}');
+
+    // GraphQL 블록
+    buffer.writeln('  {{#has_graphql}}');
+    buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
+    buffer.writeln('  $className(this._graphQLClient);');
+    buffer.writeln('  final GraphQLClient _graphQLClient;');
+    buffer.writeln('  ');
+    buffer.writeln('  @override');
+    buffer.writeln('  GraphQLClient get graphQLClient => _graphQLClient;');
+    buffer.writeln('  {{/has_graphql}}');
+
+    // Fallback (no network) 블록
+    buffer.writeln('  {{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}');
+    buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
+    buffer.writeln('  $className();');
+    buffer.writeln('  {{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}');
+    buffer.write('}');
+
+    return buffer.toString();
+  }
+
+  /// 기존 패턴별 변환 로직 (fallback)
+  String _convertRepositoryPatternsLegacy(String content) {
+    var result = content;
 
     // OpenAPI 패턴 변환
     // with HomeOpenapiMixin
