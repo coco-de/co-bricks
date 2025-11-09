@@ -325,7 +325,7 @@ class CreateCommand extends Command<int> {
     vars['github_visibility'] = githubVisibility;
 
     // Random project ID (auto-generated)
-    vars['random_project_id'] = _generateRandomId();
+    vars['randomprojectid'] = _generateRandomId();
 
     // Backend selection
     String backend = argResults!['backend'] as String;
