@@ -158,6 +158,25 @@ $ co-bricks create --type monorepo --no-interactive \
   # random_project_id는 자동 생성됨
 ```
 
+#### 자동 부트스트래핑 모드
+
+프로젝트 생성 후 자동으로 `make start`를 실행하려면 `--auto-start` 플래그를 추가하세요:
+
+```sh
+$ co-bricks create --type monorepo --auto-start \
+  --no-interactive \
+  --name good_teacher \
+  --project-shortcut gt \
+  --description "Good Teacher App" \
+  # ... (나머지 옵션)
+```
+
+이 명령어는 프로젝트 생성 후 자동으로:
+- Flutter 의존성 설치
+- Git 저장소 초기화
+- GitHub 저장소 생성 (gh CLI가 설정된 경우)
+- 초기 커밋 생성
+
 #### 생성된 프로젝트 구조
 
 프로젝트가 생성되면 다음과 같은 구조를 갖습니다:

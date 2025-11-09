@@ -130,6 +130,11 @@ class CreateCommand extends Command<int> {
         help: 'Run in interactive mode (prompts for all values)',
         defaultsTo: true,
         negatable: true,
+      )
+      ..addFlag(
+        'auto-start',
+        help: 'Automatically run "make start" after project creation',
+        defaultsTo: false,
       );
   }
 
@@ -162,6 +167,7 @@ class CreateCommand extends Command<int> {
     try {
       // Collect variables
       final vars = await _collectVariables(interactive: interactive);
+      final projectName = vars['project_name'] as String;
 
       // Create service and generate project
       final service = CreateMonorepoService(
@@ -175,8 +181,42 @@ class CreateCommand extends Command<int> {
         outputDirectory: Directory(outputDir),
       );
 
+      // Run make start if auto-start flag is set
+      final autoStart = argResults!['auto-start'] as bool;
+      if (autoStart) {
+        final projectPath = Directory('$outputDir/$projectName').absolute.path;
+        _logger
+          ..info('')
+          ..info('🚀 Running "make start" in $projectPath...');
+
+        final result = await Process.run(
+          'make',
+          ['start'],
+          workingDirectory: projectPath,
+          runInShell: true,
+        );
+
+        if (result.exitCode == 0) {
+          _logger.success('✅ Project bootstrapped successfully!');
+          if (result.stdout.toString().isNotEmpty) {
+            _logger.info(result.stdout.toString());
+          }
+        } else {
+          _logger
+            ..warn(
+              '⚠️  make start failed with exit code ${result.exitCode}',
+            )
+            ..info(
+              'You can manually run: cd $projectPath && make start',
+            );
+          if (result.stderr.toString().isNotEmpty) {
+            _logger.err(result.stderr.toString());
+          }
+        }
+      }
+
       return ExitCode.success.code;
-    } catch (e) {
+    } on Exception catch (e) {
       _logger.err('Failed to create monorepo project: $e');
       return ExitCode.software.code;
     }
@@ -201,15 +241,15 @@ class CreateCommand extends Command<int> {
     vars['project_name'] = projectName;
 
     // Project shortcut
-    String? projectShortcut = argResults!['project-shortcut'] as String?;
+    final defaultShortcut = projectName.substring(0, 2).toLowerCase();
+    var projectShortcut = argResults!['project-shortcut'] as String?;
     if (interactive && (projectShortcut == null || projectShortcut.isEmpty)) {
       projectShortcut = _logger.prompt(
         'Project shortcut (2-3 characters):',
-        defaultValue: projectName.substring(0, 2).toLowerCase(),
+        defaultValue: defaultShortcut,
       );
     }
-    vars['project_shortcut'] =
-        projectShortcut ?? projectName.substring(0, 2).toLowerCase();
+    vars['project_shortcut'] = projectShortcut ?? defaultShortcut;
 
     // Description
     String? description = argResults!['description'] as String?;
