@@ -57,6 +57,14 @@ class CreateMonorepoService {
         outputDirectory: outputDirectory,
       );
 
+      // Run post-generation hooks manually (mason 0.1.1 doesn't support hooks)
+      await _runPostGenHook(
+        brickPath: brickPath,
+        projectName: projectName,
+        variables: variables,
+        outputDirectory: outputDirectory,
+      );
+
       // Display success message
       _displaySuccessMessage(
         projectName: projectName,
@@ -164,6 +172,149 @@ export RANDOM_PROJECT_ID="${variables['random_project_id']}"
 
     await envrcFile.writeAsString(envrcContent);
     _logger.detail('Created .envrc file');
+  }
+
+  /// Runs post-generation actions manually (mason 0.1.1 doesn't support hooks).
+  /// This generates app, console, and widgetbook bricks.
+  Future<void> _runPostGenHook({
+    required String brickPath,
+    required String projectName,
+    required Map<String, dynamic> variables,
+    required Directory outputDirectory,
+  }) async {
+    final projectDir = Directory(path.join(outputDirectory.path, projectName));
+
+    // Build common mason arguments
+    final commonArgs = _buildMasonArgs(variables);
+
+    // Generate app brick
+    await _generateBrick(
+      brickName: 'app',
+      outputDir: Directory(path.join(projectDir.path, 'app')),
+      args: commonArgs,
+    );
+
+    // Generate console brick if admin is enabled
+    if (variables['enable_admin'] == true) {
+      await _generateBrick(
+        brickName: 'console',
+        outputDir: Directory(path.join(projectDir.path, 'console')),
+        args: commonArgs,
+      );
+    }
+
+    // Generate widgetbook brick
+    await _generateBrick(
+      brickName: 'widgetbook',
+      outputDir: Directory(path.join(projectDir.path, 'widgetbook')),
+      args: commonArgs,
+    );
+  }
+
+  /// Builds mason arguments from variables.
+  List<String> _buildMasonArgs(Map<String, dynamic> vars) {
+    return [
+      '--project_name',
+      vars['project_name'].toString(),
+      '--org_name',
+      vars['org_name'].toString(),
+      '--org_tld',
+      vars['org_tld'].toString(),
+      '--description',
+      vars['description'].toString(),
+      '--project_shortcut',
+      vars['project_shortcut'].toString(),
+      '--github_org',
+      vars['github_org'].toString(),
+      '--github_repo',
+      vars['github_repo'].toString(),
+      '--admin_email',
+      vars['admin_email'].toString(),
+      '--apple_developer_id',
+      vars['apple_developer_id'].toString(),
+      '--itc_team_id',
+      vars['itc_team_id'].toString(),
+      '--team_id',
+      vars['team_id'].toString(),
+      '--cert_cn',
+      vars['cert_cn'].toString(),
+      '--cert_ou',
+      vars['cert_ou'].toString(),
+      '--cert_o',
+      vars['cert_o'].toString(),
+      '--cert_l',
+      vars['cert_l'].toString(),
+      '--cert_st',
+      vars['cert_st'].toString(),
+      '--cert_c',
+      vars['cert_c'].toString(),
+      '--tld',
+      vars['tld'].toString(),
+      '--randomprojectid',
+      vars['random_project_id'].toString(),
+    ];
+  }
+
+  /// Generates a brick using mason make.
+  Future<void> _generateBrick({
+    required String brickName,
+    required Directory outputDir,
+    required List<String> args,
+    String? workingDirectory,
+  }) async {
+    final progress = _logger.progress('Generating $brickName');
+
+    try {
+      // Find the bricks repository root (where mason.yaml is)
+      final bricksRepoRoot = await _findBricksRepoRoot();
+
+      final result = await Process.run(
+        'mason',
+        ['make', brickName, ...args, '-o', outputDir.path],
+        workingDirectory: workingDirectory ?? bricksRepoRoot,
+      );
+
+      if (result.exitCode == 0) {
+        progress.complete('Generated $brickName');
+        _logger.detail(result.stdout.toString());
+      } else {
+        progress.fail('Failed to generate $brickName');
+        _logger.err(result.stderr.toString());
+      }
+    } on Exception catch (e, stackTrace) {
+      progress.fail('Failed to generate $brickName');
+      _logger
+        ..err('Error generating $brickName: $e')
+        ..detail('$stackTrace');
+      // Don't rethrow - brick generation failures shouldn't fail creation
+    }
+  }
+
+  /// Finds the bricks repository root directory.
+  Future<String> _findBricksRepoRoot() async {
+    final currentDir = Directory.current.path;
+
+    // Check current directory for mason.yaml
+    if (File(path.join(currentDir, 'mason.yaml')).existsSync()) {
+      return currentDir;
+    }
+
+    // Check parent directory
+    final parentDir = path.dirname(currentDir);
+    if (File(path.join(parentDir, 'mason.yaml')).existsSync()) {
+      return parentDir;
+    }
+
+    // Check parent of parent (template/co-bricks → template → bricks)
+    final grandparentDir = path.dirname(parentDir);
+    if (File(path.join(grandparentDir, 'mason.yaml')).existsSync()) {
+      return grandparentDir;
+    }
+
+    throw Exception(
+      'Could not find bricks repository root with mason.yaml. '
+      'Please run this command from the bricks repository or its subdirectories.',
+    );
   }
 
   /// Displays success message with next steps.
