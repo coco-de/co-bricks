@@ -181,8 +181,14 @@ class CreateCommand extends Command<int> {
         outputDirectory: Directory(outputDir),
       );
 
-      // Run make start if auto-start flag is set
-      final autoStart = argResults!['auto-start'] as bool;
+      // Ask about auto-start in interactive mode
+      var autoStart = argResults!['auto-start'] as bool;
+      if (interactive && !autoStart) {
+        autoStart = _logger.confirm(
+          'Run "make start" to initialize the project now?',
+          defaultValue: true,
+        );
+      }
       if (autoStart) {
         final projectPath = Directory('$outputDir/$projectName').absolute.path;
         _logger

@@ -130,6 +130,13 @@ $ co-bricks create --type monorepo
 
 사용자 친화적인 프롬프트가 표시되며 모든 설정값을 입력할 수 있습니다.
 
+프로젝트 생성 완료 후 다음 질문이 표시됩니다:
+```
+Run "make start" to initialize the project now? (Y/n)
+```
+- **Y (기본값)**: 프로젝트를 자동으로 초기화합니다 (의존성 설치, Git 초기화 등)
+- **n**: 수동으로 초기화할 수 있도록 건너뜁니다
+
 #### Non-interactive 모드 (자동화)
 
 ```sh
