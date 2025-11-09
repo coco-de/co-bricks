@@ -42,7 +42,7 @@ create-blueprint:
 		--description "Blueprint - Cocode's service blueprint implementation" \
 		--organization Cocode \
 		--tld im \
-		--org-tld com \
+		--org-tld im \
 		--github-org coco-de \
 		--github-repo blueprint \
 		--github-visibility private \

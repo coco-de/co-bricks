@@ -195,11 +195,16 @@ $ co-bricks create --type monorepo --auto-start \
 good_teacher/
 ├── .envrc                 # 프로젝트 설정 (위에서 입력한 모든 값 포함)
 ├── Makefile              # 개발 편의 명령어
-├── app/                  # Flutter 앱
-├── backend/              # Serverpod 백엔드 (선택한 백엔드에 따라)
-├── packages/             # 공유 패키지
+├── app/                  # Flutter 앱 (빈 디렉토리 - 별도 생성 필요)
+├── backend/              # Serverpod 백엔드 (빈 디렉토리 - 별도 생성 필요)
+├── feature/              # Feature 모듈들
+├── package/              # 공유 패키지
 └── ...
 ```
+
+> **참고**: `monorepo` 브릭은 프로젝트 구조만 생성합니다.
+> 실제 앱과 백엔드는 `feature/application`, `feature/common` 등에 이미 포함되어 있거나,
+> 필요시 별도의 브릭으로 생성해야 합니다.
 
 #### 다음 단계
 
