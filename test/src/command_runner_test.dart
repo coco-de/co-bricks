@@ -54,13 +54,15 @@ void main() {
       verify(() => logger.info(updatePrompt)).called(1);
     });
 
-    test('shows error message when failed to check for updates', () async {
+    test('silently ignores update check failures', () async {
       when(
         () => pubUpdater.getLatestVersion(any()),
       ).thenThrow(Exception('Failed to check for updates'));
 
-      await commandRunner.run(['--version']);
-      verify(() => logger.err('Failed to check for updates.')).called(1);
+      final result = await commandRunner.run(['--version']);
+      expect(result, equals(ExitCode.success.code));
+      // Update check failures should be silently ignored in development
+      verifyNever(() => logger.err(any()));
     });
 
     test('Does not show update message when the shell calls the '

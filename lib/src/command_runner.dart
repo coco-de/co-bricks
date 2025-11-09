@@ -138,7 +138,8 @@ ${lightYellow.wrap('Update available!')} ${lightCyan.wrap(packageVersion)} \u219
 Run ${lightCyan.wrap('$executableName update')} to update''');
       }
     } on Exception catch (_) {
-      _logger.err('Failed to check for updates.');
+      // Silently ignore update check failures in development
+      // This is expected when running from local path activation
     }
   }
 }
