@@ -119,7 +119,9 @@ class CreateMonorepoService {
     required Map<String, dynamic> variables,
     required Directory outputDirectory,
   }) async {
-    final projectDir = Directory(path.join(outputDirectory.path, projectName));
+    // Use paramCase for directory name (mason converts project_name to param-case)
+    final projectDirName = projectName.replaceAll('_', '-');
+    final projectDir = Directory(path.join(outputDirectory.path, projectDirName));
     final envrcFile = File(path.join(projectDir.path, '.envrc'));
 
     // Determine backend type
@@ -175,40 +177,79 @@ export RANDOM_PROJECT_ID="${variables['random_project_id']}"
   }
 
   /// Runs post-generation actions manually (mason 0.1.1 doesn't support hooks).
-  /// This generates app, console, and widgetbook bricks.
+  /// This generates app, console, widgetbook, serverpod_backend, and serverpod_service bricks.
   Future<void> _runPostGenHook({
     required String brickPath,
     required String projectName,
     required Map<String, dynamic> variables,
     required Directory outputDirectory,
   }) async {
-    final projectDir = Directory(path.join(outputDirectory.path, projectName));
+    // Use paramCase for directory name (mason converts project_name to param-case)
+    final projectDirName = projectName.replaceAll('_', '-');
+    final projectDir = Directory(path.join(outputDirectory.path, projectDirName));
 
     // Build common mason arguments
     final commonArgs = _buildMasonArgs(variables);
 
-    // Generate app brick
+    // Generate app brick to app/<project_name>/
     await _generateBrick(
       brickName: 'app',
-      outputDir: Directory(path.join(projectDir.path, 'app')),
+      outputDir: Directory(path.join(projectDir.path, 'app', projectName)),
       args: commonArgs,
     );
 
-    // Generate console brick if admin is enabled
+    // Generate console brick to app/<project_name>_console/ if admin is enabled
     if (variables['enable_admin'] == true) {
       await _generateBrick(
         brickName: 'console',
-        outputDir: Directory(path.join(projectDir.path, 'console')),
+        outputDir: Directory(path.join(projectDir.path, 'app', '${projectName}_console')),
         args: commonArgs,
       );
     }
 
-    // Generate widgetbook brick
+    // Generate widgetbook brick to app/<project_name>_widgetbook/
     await _generateBrick(
       brickName: 'widgetbook',
-      outputDir: Directory(path.join(projectDir.path, 'widgetbook')),
+      outputDir: Directory(path.join(projectDir.path, 'app', '${projectName}_widgetbook')),
       args: commonArgs,
     );
+
+    // Generate serverpod backend and service if serverpod is enabled
+    if (variables['has_serverpod'] == true) {
+      // serverpod_backend has different variable requirements
+      final backendArgs = [
+        '--project_name',
+        variables['project_name'].toString(),
+        '--org_name',
+        variables['org_name'].toString(),
+        '--org_tld',
+        variables['org_tld'].toString(),
+        '--randomprojectid',
+        variables['random_project_id'].toString(),
+        '--team_id',
+        variables['team_id'].toString(),
+        '--has_aws',
+        'true',
+      ];
+
+      await _generateBrick(
+        brickName: 'serverpod_backend',
+        outputDir: Directory(path.join(projectDir.path, 'backend')),
+        args: backendArgs,
+      );
+
+      // serverpod_service only needs project_name
+      final serviceArgs = [
+        '--project_name',
+        variables['project_name'].toString(),
+      ];
+
+      await _generateBrick(
+        brickName: 'serverpod_service',
+        outputDir: Directory(path.join(projectDir.path, 'package')),
+        args: serviceArgs,
+      );
+    }
   }
 
   /// Builds mason arguments from variables.
@@ -270,7 +311,15 @@ export RANDOM_PROJECT_ID="${variables['random_project_id']}"
 
       final result = await Process.run(
         'mason',
-        ['make', brickName, ...args, '-o', outputDir.path],
+        [
+          'make',
+          brickName,
+          ...args,
+          '-o',
+          outputDir.path,
+          '--on-conflict',
+          'overwrite',
+        ],
         workingDirectory: workingDirectory ?? bricksRepoRoot,
       );
 
@@ -322,7 +371,9 @@ export RANDOM_PROJECT_ID="${variables['random_project_id']}"
     required String projectName,
     required String outputPath,
   }) {
-    final projectPath = path.join(outputPath, projectName);
+    // Use paramCase for directory name (mason converts project_name to param-case)
+    final projectDirName = projectName.replaceAll('_', '-');
+    final projectPath = path.join(outputPath, projectDirName);
 
     _logger
       ..info('')
