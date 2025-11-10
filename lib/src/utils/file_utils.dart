@@ -15,12 +15,67 @@ class FileUtils {
     '.git',
   ];
 
-  /// 제외할 파일 패턴
-  static bool shouldExcludeFile(String fileName) {
-    // .iml 파일 제외 (프로젝트 설정)
+  /// 제외할 파일 패턴 (파일명 기반)
+  static bool shouldExcludeFile(String fileName, [String? filePath]) {
+    // melos .iml 파일 제외
     if (fileName.startsWith('melos_') && fileName.endsWith('.iml')) {
       return true;
     }
+
+    // pubspec.lock 및 pubspec_overrides.yaml 제외
+    if (fileName == 'pubspec.lock' || fileName == 'pubspec_overrides.yaml') {
+      return true;
+    }
+
+    // 코드 생성 파일들 제외 (전역)
+    final generatedPatterns = [
+      '.g.dart',           // build_runner 생성 파일
+      '.freezed.dart',     // freezed 생성 파일
+      '.config.dart',      // envied 등 설정 생성 파일
+      '.gr.dart',          // auto_route 생성 파일
+      '.gen.dart',         // flutter_gen 등 생성 파일
+      '.module.dart',      // injectable 모듈 생성 파일
+    ];
+
+    for (final pattern in generatedPatterns) {
+      if (fileName.endsWith(pattern)) {
+        return true;
+      }
+    }
+
+    // 경로 기반 제외 (filePath가 제공된 경우)
+    if (filePath != null) {
+      // 정규화된 경로 사용 (윈도우 호환)
+      final normalizedPath = filePath.replaceAll('\\', '/');
+
+      // 테스트 Mock 파일 제외: **/test/**/*.mocks.dart
+      if (normalizedPath.contains('/test/') && fileName.endsWith('.mocks.dart')) {
+        return true;
+      }
+
+      // Serverpod 생성 파일 제외
+      // backend/*_client/lib/src/protocol/**/*.dart
+      if (normalizedPath.contains('/backend/') &&
+          normalizedPath.contains('_client/lib/src/protocol/') &&
+          fileName.endsWith('.dart')) {
+        return true;
+      }
+
+      // backend/*_server/lib/src/generated/**/*.dart
+      if (normalizedPath.contains('/backend/') &&
+          normalizedPath.contains('_server/lib/src/generated/') &&
+          fileName.endsWith('.dart')) {
+        return true;
+      }
+
+      // backend/*_server/test/integration/test_tools/serverpod_test_tools.dart
+      if (normalizedPath.contains('/backend/') &&
+          normalizedPath.contains('_server/test/integration/test_tools/') &&
+          fileName == 'serverpod_test_tools.dart') {
+        return true;
+      }
+    }
+
     return false;
   }
 
@@ -62,7 +117,7 @@ class FileUtils {
         );
       } else if (entity is File) {
         // 제외할 파일이면 스킵
-        if (shouldExcludeFile(path.basename(entity.path))) {
+        if (shouldExcludeFile(path.basename(entity.path), entity.path)) {
           continue;
         }
         await entity.copy(targetPath);
