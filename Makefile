@@ -35,8 +35,8 @@ create-blueprint:
 	@rm -rf ../blueprint
 	@dart run bin/co_bricks.dart create \
 		--type monorepo \
-		--auto-start \
 		--no-interactive \
+		--auto-start \
 		--name blueprint \
 		--project-shortcut bp \
 		--description "Blueprint - Cocode's service blueprint implementation" \
@@ -47,7 +47,7 @@ create-blueprint:
 		--github-repo blueprint \
 		--github-visibility private \
 		--backend serverpod \
-		--enable-admin \
+		--enable-admin true \
 		--admin-email dev@cocode.im \
 		--apple-developer-id dev@cocode.com \
 		--itc-team-id 127798085 \

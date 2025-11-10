@@ -122,7 +122,6 @@ class CreateCommand extends Command<int> {
       ..addOption(
         'enable-admin',
         help: 'Enable admin functionality (true/false)',
-        defaultsTo: 'true',
         allowed: ['true', 'false'],
       )
       ..addFlag(
@@ -356,13 +355,20 @@ class CreateCommand extends Command<int> {
     vars['admin_email'] = adminEmail ?? 'dev@${projectName.toLowerCase()}.$tld';
 
     // Enable admin
-    var enableAdminStr = argResults!['enable-admin'] as String;
-    var enableAdmin = enableAdminStr.toLowerCase() == 'true';
-    if (interactive) {
+    final enableAdminStr = argResults!['enable-admin'] as String?;
+    final bool enableAdmin;
+    if (enableAdminStr != null) {
+      // Value was explicitly provided via command line
+      enableAdmin = enableAdminStr.toLowerCase() == 'true';
+    } else if (interactive) {
+      // No value provided, ask in interactive mode
       enableAdmin = _logger.confirm(
         'Enable admin functionality?',
-        defaultValue: enableAdmin,
+        defaultValue: true,
       );
+    } else {
+      // Non-interactive mode without value, use default
+      enableAdmin = true;
     }
     vars['enable_admin'] = enableAdmin;
 
