@@ -355,7 +355,13 @@ class CreateCommand extends Command<int> {
     vars['admin_email'] = adminEmail ?? 'dev@${projectName.toLowerCase()}.$tld';
 
     // Enable admin
-    final enableAdmin = argResults!['enable-admin'] as bool;
+    var enableAdmin = argResults!['enable-admin'] as bool;
+    if (interactive) {
+      enableAdmin = _logger.confirm(
+        'Enable admin functionality?',
+        defaultValue: enableAdmin,
+      );
+    }
     vars['enable_admin'] = enableAdmin;
 
     // Apple Developer ID
