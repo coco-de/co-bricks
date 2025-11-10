@@ -119,10 +119,11 @@ class CreateCommand extends Command<int> {
         'cert-c',
         help: 'Certificate Country (2-letter code)',
       )
-      ..addFlag(
+      ..addOption(
         'enable-admin',
-        help: 'Enable admin functionality',
-        defaultsTo: true,
+        help: 'Enable admin functionality (true/false)',
+        defaultsTo: 'true',
+        allowed: ['true', 'false'],
       )
       ..addFlag(
         'interactive',
@@ -355,7 +356,8 @@ class CreateCommand extends Command<int> {
     vars['admin_email'] = adminEmail ?? 'dev@${projectName.toLowerCase()}.$tld';
 
     // Enable admin
-    var enableAdmin = argResults!['enable-admin'] as bool;
+    var enableAdminStr = argResults!['enable-admin'] as String;
+    var enableAdmin = enableAdminStr.toLowerCase() == 'true';
     if (interactive) {
       enableAdmin = _logger.confirm(
         'Enable admin functionality?',
