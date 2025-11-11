@@ -1,11 +1,10 @@
 import 'dart:io';
 
-import 'package:mason_logger/mason_logger.dart';
-import 'package:path/path.dart' as path;
-
 import 'package:co_bricks/src/services/envrc_service.dart';
 import 'package:co_bricks/src/utils/file_utils.dart';
 import 'package:co_bricks/src/utils/template_converter.dart';
+import 'package:mason_logger/mason_logger.dart';
+import 'package:path/path.dart' as path;
 
 /// Monorepo 동기화 서비스
 class SyncMonorepoService {
@@ -44,8 +43,8 @@ class SyncMonorepoService {
 
     if (templateDir == null) {
       final searchPath = projectDir != null
-        ? projectDir.path
-        : 'template/${config.projectName}';
+          ? projectDir.path
+          : 'template/${config.projectName}';
       throw FileSystemException(
         'Template directory not found: $searchPath',
         rootDir.path,
@@ -89,8 +88,8 @@ class SyncMonorepoService {
     );
 
     final projectDirName = projectDir != null
-      ? path.basename(projectDir.path)
-      : config.projectName;
+        ? path.basename(projectDir.path)
+        : config.projectName;
 
     logger.info('🚀 Template Monorepo Synchronization');
     logger.info('📄 Project: $projectDirName');
@@ -263,7 +262,9 @@ class SyncMonorepoService {
       for (final brickName in networkBricks) {
         final brickDir = Directory(path.join(targetDir.path, brickName));
         if (brickDir.existsSync()) {
-          logger.info('   🗑️  Removing $brickName from monorepo (managed as separate brick)...');
+          logger.info(
+            '   🗑️  Removing $brickName from monorepo (managed as separate brick)...',
+          );
           await brickDir.delete(recursive: true);
         }
       }
@@ -310,7 +311,9 @@ class SyncMonorepoService {
         final fileName = path.basename(entity.path);
 
         // 네트워크별 mixin 파일인지 확인
-        final isNetworkMixin = mixinPatterns.any((pattern) => fileName.endsWith(pattern));
+        final isNetworkMixin = mixinPatterns.any(
+          (pattern) => fileName.endsWith(pattern),
+        );
 
         if (isNetworkMixin) {
           try {
@@ -652,8 +655,11 @@ class SyncMonorepoService {
     };
 
     // shared/dependencies/pubspec.yaml인지 확인
-    final isDependenciesPubspec = filePath.contains('shared/dependencies/pubspec.yaml') ||
-                                   filePath.contains('shared${path.separator}dependencies${path.separator}pubspec.yaml');
+    final isDependenciesPubspec =
+        filePath.contains('shared/dependencies/pubspec.yaml') ||
+        filePath.contains(
+          'shared${path.separator}dependencies${path.separator}pubspec.yaml',
+        );
 
     for (final entry in servicePatterns.entries) {
       final serviceName = entry.key;
@@ -724,7 +730,8 @@ class SyncMonorepoService {
     var i = 0;
 
     // Import 문들 복사
-    while (i < lines.length && (lines[i].startsWith('import') || lines[i].trim().isEmpty)) {
+    while (i < lines.length &&
+        (lines[i].startsWith('import') || lines[i].trim().isEmpty)) {
       result.add(lines[i]);
       i++;
     }
@@ -757,7 +764,10 @@ class SyncMonorepoService {
     String? mixinPrefix;
     String? databaseField;
     String? databaseType;
-    final daoGetters = <Map<String, String>>[];  // {getterName: 'postDao', daoType: 'PostDao', sourcePath: '_database.postDao'}
+    final daoGetters =
+        <
+          Map<String, String>
+        >[]; // {getterName: 'postDao', daoType: 'PostDao', sourcePath: '_database.postDao'}
 
     // 나머지 파일을 스캔해서 정보 수집
     for (var j = i; j < lines.length; j++) {
@@ -771,13 +781,19 @@ class SyncMonorepoService {
 
       // Mixin 이름
       if (line.contains('with') && line.contains('Mixin')) {
-        final match = RegExp(r'with\s+(\w+)(Openapi|Serverpod|Graphql|Supabase|Firebase)Mixin').firstMatch(line);
+        final match = RegExp(
+          r'with\s+(\w+)(Openapi|Serverpod|Graphql|Supabase|Firebase)Mixin',
+        ).firstMatch(line);
         mixinPrefix = match?.group(1);
       }
 
       // Database 필드 (예: final CommunityDatabase _database;)
-      if (line.contains('final') && line.contains('Database') && line.contains('_database')) {
-        final match = RegExp(r'final\s+(\w+Database)\s+(_database);').firstMatch(line);
+      if (line.contains('final') &&
+          line.contains('Database') &&
+          line.contains('_database')) {
+        final match = RegExp(
+          r'final\s+(\w+Database)\s+(_database);',
+        ).firstMatch(line);
         if (match != null) {
           databaseType = match.group(1);
           databaseField = match.group(2);
@@ -786,7 +802,9 @@ class SyncMonorepoService {
 
       // DAO getter (예: PostDao get postDao => _database.postDao;)
       if (line.contains('get') && line.contains('Dao') && line.contains('=>')) {
-        final match = RegExp(r'(\w+Dao)\s+get\s+(\w+)\s+=>\s+_database\.(\w+);').firstMatch(line);
+        final match = RegExp(
+          r'(\w+Dao)\s+get\s+(\w+)\s+=>\s+_database\.(\w+);',
+        ).firstMatch(line);
         if (match != null) {
           final daoType = match.group(1)!;
           final getterName = match.group(2)!;
@@ -811,17 +829,21 @@ class SyncMonorepoService {
 
     // 네트워크/백엔드별 주석 추가
     result.add('');
-    result.add('{{#has_serverpod}}/// Serverpod Client를 통해 실제 백엔드 API와 통신{{/has_serverpod}}');
+    result.add(
+      '{{#has_serverpod}}/// Serverpod Client를 통해 실제 백엔드 API와 통신{{/has_serverpod}}',
+    );
     result.add('{{#has_openapi}}/// REST API를 통해 실제 백엔드와 통신{{/has_openapi}}');
     result.add('{{#has_graphql}}/// GraphQL을 통해 실제 백엔드와 통신{{/has_graphql}}');
     result.add('{{#has_supabase}}/// Supabase를 통해 실제 백엔드와 통신{{/has_supabase}}');
     result.add('{{#has_firebase}}/// Firebase를 통해 실제 백엔드와 통신{{/has_firebase}}');
-    result.add('{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}{{^has_supabase}}{{^has_firebase}}/// 메모리에서 데이터를 생성하고 관리{{/has_firebase}}{{/has_supabase}}{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}');
+    result.add(
+      '{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}{{^has_supabase}}{{^has_firebase}}/// 메모리에서 데이터를 생성하고 관리{{/has_firebase}}{{/has_supabase}}{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}',
+    );
     result.add('');
 
     // 템플릿 생성
     final template = _generateRepositoryTemplate(
-      docComment: '',  // 이미 추가됨
+      docComment: '', // 이미 추가됨
       className: className,
       mixinPrefix: mixinPrefix,
       databaseField: databaseField,
@@ -855,28 +877,51 @@ class SyncMonorepoService {
     required List<Map<String, String>> daoGetters,
   }) {
     final buffer = StringBuffer();
-    final hasDatabase = databaseField != null && databaseType != null && daoGetters.isNotEmpty;
+    final hasDatabase =
+        databaseField != null && databaseType != null && daoGetters.isNotEmpty;
 
     // 문서 주석
     buffer.writeln(docComment.trimRight());
 
     // 네트워크/백엔드별 주석
-    buffer.writeln('{{#has_serverpod}}/// Serverpod Client를 통해 실제 백엔드 API와 통신{{/has_serverpod}}');
-    buffer.writeln('{{#has_openapi}}/// REST API를 통해 실제 백엔드와 통신{{/has_openapi}}');
-    buffer.writeln('{{#has_graphql}}/// GraphQL을 통해 실제 백엔드와 통신{{/has_graphql}}');
-    buffer.writeln('{{#has_supabase}}/// Supabase를 통해 실제 백엔드와 통신{{/has_supabase}}');
-    buffer.writeln('{{#has_firebase}}/// Firebase를 통해 실제 백엔드와 통신{{/has_firebase}}');
-    buffer.writeln('{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}{{^has_supabase}}{{^has_firebase}}/// 메모리에서 데이터를 생성하고 관리{{/has_firebase}}{{/has_supabase}}{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}');
+    buffer.writeln(
+      '{{#has_serverpod}}/// Serverpod Client를 통해 실제 백엔드 API와 통신{{/has_serverpod}}',
+    );
+    buffer.writeln(
+      '{{#has_openapi}}/// REST API를 통해 실제 백엔드와 통신{{/has_openapi}}',
+    );
+    buffer.writeln(
+      '{{#has_graphql}}/// GraphQL을 통해 실제 백엔드와 통신{{/has_graphql}}',
+    );
+    buffer.writeln(
+      '{{#has_supabase}}/// Supabase를 통해 실제 백엔드와 통신{{/has_supabase}}',
+    );
+    buffer.writeln(
+      '{{#has_firebase}}/// Firebase를 통해 실제 백엔드와 통신{{/has_firebase}}',
+    );
+    buffer.writeln(
+      '{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}{{^has_supabase}}{{^has_firebase}}/// 메모리에서 데이터를 생성하고 관리{{/has_firebase}}{{/has_supabase}}{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}',
+    );
     buffer.writeln();
 
     final interfaceName = 'I$className';
     buffer.writeln('@LazySingleton(as: $interfaceName)');
     buffer.writeln('class $className ');
-    buffer.writeln('    {{#has_serverpod}}with ${mixinPrefix}ServerpodMixin{{/has_serverpod}}');
-    buffer.writeln('    {{#has_openapi}}with ${mixinPrefix}OpenapiMixin{{/has_openapi}}');
-    buffer.writeln('    {{#has_graphql}}with ${mixinPrefix}GraphqlMixin{{/has_graphql}}');
-    buffer.writeln('    {{#has_supabase}}with ${mixinPrefix}SupabaseMixin{{/has_supabase}}');
-    buffer.writeln('    {{#has_firebase}}with ${mixinPrefix}FirebaseMixin{{/has_firebase}}');
+    buffer.writeln(
+      '    {{#has_serverpod}}with ${mixinPrefix}ServerpodMixin{{/has_serverpod}}',
+    );
+    buffer.writeln(
+      '    {{#has_openapi}}with ${mixinPrefix}OpenapiMixin{{/has_openapi}}',
+    );
+    buffer.writeln(
+      '    {{#has_graphql}}with ${mixinPrefix}GraphqlMixin{{/has_graphql}}',
+    );
+    buffer.writeln(
+      '    {{#has_supabase}}with ${mixinPrefix}SupabaseMixin{{/has_supabase}}',
+    );
+    buffer.writeln(
+      '    {{#has_firebase}}with ${mixinPrefix}FirebaseMixin{{/has_firebase}}',
+    );
     buffer.writeln('    implements $interfaceName {');
 
     // Serverpod 블록
@@ -899,7 +944,9 @@ class SyncMonorepoService {
     buffer.writeln();
     for (final dao in daoGetters) {
       buffer.writeln('  @override');
-      buffer.writeln('  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};');
+      buffer.writeln(
+        '  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};',
+      );
       buffer.writeln();
     }
     buffer.writeln('  {{/has_serverpod}}');
@@ -926,7 +973,9 @@ class SyncMonorepoService {
     buffer.writeln();
     for (final dao in daoGetters) {
       buffer.writeln('  @override');
-      buffer.writeln('  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};');
+      buffer.writeln(
+        '  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};',
+      );
       buffer.writeln();
     }
     buffer.writeln('  {{/has_openapi}}');
@@ -951,7 +1000,9 @@ class SyncMonorepoService {
     for (final dao in daoGetters) {
       buffer.writeln();
       buffer.writeln('  @override');
-      buffer.writeln('  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};');
+      buffer.writeln(
+        '  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};',
+      );
     }
     buffer.writeln('  {{/has_graphql}}');
 
@@ -975,7 +1026,9 @@ class SyncMonorepoService {
     for (final dao in daoGetters) {
       buffer.writeln();
       buffer.writeln('  @override');
-      buffer.writeln('  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};');
+      buffer.writeln(
+        '  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};',
+      );
     }
     buffer.writeln('  {{/has_supabase}}');
 
@@ -995,19 +1048,27 @@ class SyncMonorepoService {
     }
     buffer.writeln('  ');
     buffer.writeln('  @override');
-    buffer.writeln('  FirebaseService get firebaseService => _firebaseService;');
+    buffer.writeln(
+      '  FirebaseService get firebaseService => _firebaseService;',
+    );
     for (final dao in daoGetters) {
       buffer.writeln();
       buffer.writeln('  @override');
-      buffer.writeln('  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};');
+      buffer.writeln(
+        '  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};',
+      );
     }
     buffer.writeln('  {{/has_firebase}}');
 
     // Fallback (no network) 블록
-    buffer.writeln('  {{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}{{^has_supabase}}{{^has_firebase}}');
+    buffer.writeln(
+      '  {{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}{{^has_supabase}}{{^has_firebase}}',
+    );
     buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
     buffer.writeln('  $className();');
-    buffer.writeln('  {{/has_firebase}}{{/has_supabase}}{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}');
+    buffer.writeln(
+      '  {{/has_firebase}}{{/has_supabase}}{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}',
+    );
     buffer.write('}');
 
     return buffer.toString();
@@ -1161,7 +1222,10 @@ class SyncMonorepoService {
 
     // /// Supabase를 통해 실제 백엔드와 통신
     result = result.replaceAllMapped(
-      RegExp(r'^(\s*)///\s*Supabase를\s+통해\s+실제\s+백엔드와\s+통신\s*$', multiLine: true),
+      RegExp(
+        r'^(\s*)///\s*Supabase를\s+통해\s+실제\s+백엔드와\s+통신\s*$',
+        multiLine: true,
+      ),
       (match) {
         final indent = match.group(1) ?? '';
         return '${indent}{{#has_supabase}}/// Supabase를 통해 실제 백엔드와 통신{{/has_supabase}}';
@@ -1170,7 +1234,10 @@ class SyncMonorepoService {
 
     // /// Firebase를 통해 실제 백엔드와 통신
     result = result.replaceAllMapped(
-      RegExp(r'^(\s*)///\s*Firebase를\s+통해\s+실제\s+백엔드와\s+통신\s*$', multiLine: true),
+      RegExp(
+        r'^(\s*)///\s*Firebase를\s+통해\s+실제\s+백엔드와\s+통신\s*$',
+        multiLine: true,
+      ),
       (match) {
         final indent = match.group(1) ?? '';
         return '${indent}{{#has_firebase}}/// Firebase를 통해 실제 백엔드와 통신{{/has_firebase}}';
