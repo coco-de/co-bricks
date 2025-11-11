@@ -242,17 +242,35 @@ class SyncAppService {
   /// App 동기화 실행
   Future<void> sync(ProjectConfig config, Directory? projectDir) async {
     final rootDir = projectDir ?? Directory.current;
-    final appBase = findTemplateProject(rootDir, config.projectName);
+
+    // --project-dir이 지정된 경우 해당 경로의 app 디렉토리 직접 확인
+    Directory? appBase;
+    if (projectDir != null) {
+      final directAppDir = Directory(path.join(projectDir.path, 'app'));
+      if (directAppDir.existsSync()) {
+        appBase = directAppDir;
+      }
+    }
+
+    // 지정되지 않았거나 app 디렉토리가 없으면 자동 탐색
+    appBase ??= findTemplateProject(rootDir, config.projectName);
 
     if (appBase == null) {
+      final searchPath = projectDir != null
+        ? '${projectDir.path}/app/'
+        : 'template/${config.projectName}/app/';
       throw FileSystemException(
-        'Template project not found. Please ensure template/${config.projectName}/app/ exists.',
+        'Template project not found. Please ensure $searchPath exists.',
         rootDir.path,
       );
     }
 
-    logger.info('📄 Auto-detected project: ${config.projectName}');
-    logger.info('📂 Source: template/${config.projectName}/app/');
+    final projectDirName = projectDir != null
+      ? path.basename(projectDir.path)
+      : config.projectName;
+
+    logger.info('📄 Project: $projectDirName');
+    logger.info('📂 Source: ${path.relative(appBase.path)}');
     logger.info('🎯 Target: bricks/{app,console,widgetbook}/__brick__/');
     logger.info('');
 

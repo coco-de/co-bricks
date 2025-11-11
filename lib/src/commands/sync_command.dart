@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:mason_logger/mason_logger.dart';
+import 'package:path/path.dart' as path;
 
 import 'package:co_bricks/src/services/envrc_service.dart';
 import 'package:co_bricks/src/services/sync_app_service.dart';
@@ -56,18 +57,25 @@ class SyncCommand extends Command<int> {
       }
 
       // 프로젝트 디렉토리 결정
-      final projectDir = projectDirPath != null
-          ? Directory(projectDirPath)
-          : Directory.current;
+      Directory? projectDir;
+      if (projectDirPath != null) {
+        // 상대 경로를 절대 경로로 변환
+        final absolutePath = path.isAbsolute(projectDirPath)
+            ? projectDirPath
+            : path.join(Directory.current.path, projectDirPath);
+        projectDir = Directory(path.normalize(absolutePath));
 
-      if (!projectDir.existsSync()) {
-        _logger.err('Project directory does not exist: ${projectDir.path}');
-        return ExitCode.noInput.code;
+        if (!projectDir.existsSync()) {
+          _logger.err('Project directory does not exist: ${projectDir.path}');
+          return ExitCode.noInput.code;
+        }
       }
 
       // .envrc 파일에서 프로젝트 설정 로드
       _logger.info('🔍 Loading project configuration from .envrc...');
-      final config = EnvrcService.loadFromProjectDir(projectDir.path);
+      final config = EnvrcService.loadFromProjectDir(
+        projectDir?.path ?? Directory.current.path,
+      );
 
       _logger.info('   Project: ${config.projectName}');
       _logger.info('   Organization: ${config.orgName}');
