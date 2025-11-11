@@ -17,35 +17,43 @@ class SyncMonorepoService {
   Future<void> sync(ProjectConfig config, Directory? projectDir) async {
     final rootDir = projectDir ?? Directory.current;
 
-    // template 디렉토리 찾기 (상위로 올라가면서)
-    var currentDir = rootDir;
+    // --project-dir이 지정된 경우 해당 경로 직접 사용
     Directory? templateDir;
+    if (projectDir != null && projectDir.existsSync()) {
+      templateDir = projectDir;
+    } else {
+      // 지정되지 않았으면 template 디렉토리 찾기 (상위로 올라가면서)
+      var currentDir = rootDir;
 
-    while (true) {
-      final candidateTemplateDir = Directory(
-        path.join(currentDir.path, 'template', config.projectName),
-      );
-      if (candidateTemplateDir.existsSync()) {
-        templateDir = candidateTemplateDir;
-        break;
-      }
+      while (true) {
+        final candidateTemplateDir = Directory(
+          path.join(currentDir.path, 'template', config.projectName),
+        );
+        if (candidateTemplateDir.existsSync()) {
+          templateDir = candidateTemplateDir;
+          break;
+        }
 
-      final parent = currentDir.parent;
-      if (parent.path == currentDir.path) {
-        break;
+        final parent = currentDir.parent;
+        if (parent.path == currentDir.path) {
+          break;
+        }
+        currentDir = parent;
       }
-      currentDir = parent;
     }
 
     if (templateDir == null) {
+      final searchPath = projectDir != null
+        ? projectDir.path
+        : 'template/${config.projectName}';
       throw FileSystemException(
-        'Template directory not found: template/${config.projectName}',
+        'Template directory not found: $searchPath',
         rootDir.path,
       );
     }
 
     // bricks 디렉토리 찾기 (상위로 올라가면서)
-    currentDir = rootDir;
+    var currentDir = rootDir;
     Directory? bricksDir;
 
     while (true) {
@@ -76,15 +84,19 @@ class SyncMonorepoService {
         bricksDir.path,
         'monorepo',
         '__brick__',
-        '{{project_name.snakeCase()}}',
+        '{{project_name.paramCase()}}',
       ),
     );
 
+    final projectDirName = projectDir != null
+      ? path.basename(projectDir.path)
+      : config.projectName;
+
     logger.info('🚀 Template Monorepo Synchronization');
-    logger.info('📍 Root: $rootDir');
-    logger.info('📄 Source: template/${config.projectName}/');
+    logger.info('📄 Project: $projectDirName');
+    logger.info('📂 Source: ${path.relative(templateDir.path)}');
     logger.info(
-      '🎯 Target: bricks/monorepo/__brick__/{{project_name.snakeCase()}}/',
+      '🎯 Target: bricks/monorepo/__brick__/{{project_name.paramCase()}}/',
     );
     logger.info('');
 
