@@ -73,6 +73,12 @@ class FileUtils {
           fileName == 'serverpod_test_tools.dart') {
         return true;
       }
+
+      // backend/*_server/migrations/**/* (마이그레이션 파일 제외)
+      if (normalizedPath.contains('/backend/') &&
+          normalizedPath.contains('_server/migrations/')) {
+        return true;
+      }
     }
 
     return false;
@@ -105,10 +111,21 @@ class FileUtils {
       final targetPath = path.join(target.path, path.basename(entity.path));
 
       if (entity is Directory) {
+        final dirName = entity.path.split(path.separator).last;
+
         // 제외할 디렉토리면 스킵
-        if (excludedDirs.contains(entity.path.split(path.separator).last)) {
+        if (excludedDirs.contains(dirName)) {
           continue;
         }
+
+        // migrations 디렉토리 제외 (backend/*_server/migrations)
+        final normalizedPath = entity.path.replaceAll(r'\', '/');
+        if (dirName == 'migrations' &&
+            normalizedPath.contains('/backend/') &&
+            normalizedPath.contains('_server/')) {
+          continue;
+        }
+
         await copyDirectory(
           entity,
           Directory(targetPath),
