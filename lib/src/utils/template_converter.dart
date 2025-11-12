@@ -336,6 +336,21 @@ class TemplateConverter {
         );
       }
 
+      // 경로 패턴: app/ 하위는 snakeCase 사용 (suffix 패턴 다음, 일반 패턴보다 먼저)
+      // app/프로젝트명/ 형태의 경로
+      patterns.addAll([
+        // app/blueprint/ -> app/{{project_name.snakeCase()}}/
+        ReplacementPattern(
+          RegExp('app/${_escapeRegex(baseSnake)}/'),
+          'app/{{project_name.snakeCase()}}/',
+        ),
+        // app/blueprint (마지막 슬래시 없음) -> app/{{project_name.snakeCase()}}
+        ReplacementPattern(
+          RegExp('app/${_escapeRegex(baseSnake)}\\b'),
+          'app/{{project_name.snakeCase()}}',
+        ),
+      ]);
+
       // 하이픈(-) 패턴: paramCase 사용
       patterns.addAll([
         ReplacementPattern(

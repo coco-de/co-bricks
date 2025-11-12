@@ -134,8 +134,9 @@ class FileUtils {
   /// 파일명 변환 (프로젝트명을 템플릿 변수로 변환)
   static String convertFileName(
     String fileName,
-    List<String> projectNames,
-  ) {
+    List<String> projectNames, {
+    bool isRootDirectory = false,
+  }) {
     var newName = fileName;
     final fileNameLower = fileName.toLowerCase();
 
@@ -175,9 +176,13 @@ class FileUtils {
 
       for (final pattern in patterns) {
         if (fileNameLower.contains(pattern.toLowerCase())) {
+          // 루트 디렉토리는 paramCase, 나머지는 snakeCase 사용
+          final templateVar = isRootDirectory
+              ? '{{project_name.paramCase()}}'
+              : '{{project_name.snakeCase()}}';
           newName = newName.replaceAll(
             RegExp(pattern, caseSensitive: false),
-            '{{project_name.snakeCase()}}',
+            templateVar,
           );
           break;
         }
@@ -190,9 +195,14 @@ class FileUtils {
   /// 디렉토리명 변환
   static String convertDirectoryName(
     String dirName,
-    List<String> projectNames,
-  ) {
-    return convertFileName(dirName, projectNames);
+    List<String> projectNames, {
+    bool isRootDirectory = false,
+  }) {
+    return convertFileName(
+      dirName,
+      projectNames,
+      isRootDirectory: isRootDirectory,
+    );
   }
 
   /// Android Kotlin 디렉토리 경로 변환
