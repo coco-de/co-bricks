@@ -4,15 +4,13 @@ import 'package:path/path.dart' as path;
 
 /// 파일 시스템 유틸리티
 class FileUtils {
-  /// 제외할 디렉토리 목록
+  /// 제외할 디렉토리 목록 (정확한 이름 매칭)
   static const excludedDirs = [
     '.dart_tool',
     'build',
-    '.idea',
     'node_modules',
     'Pods',
-    '.vscode',
-    '.git',
+    '.git', // .github, .githooks는 포함해야 하므로 정확히 .git만
   ];
 
   /// 제외할 파일 패턴 (파일명 기반)
@@ -29,12 +27,12 @@ class FileUtils {
 
     // 코드 생성 파일들 제외 (전역)
     final generatedPatterns = [
-      '.g.dart',           // build_runner 생성 파일
-      '.freezed.dart',     // freezed 생성 파일
-      '.config.dart',      // envied 등 설정 생성 파일
-      '.gr.dart',          // auto_route 생성 파일
-      '.gen.dart',         // flutter_gen 등 생성 파일
-      '.module.dart',      // injectable 모듈 생성 파일
+      '.g.dart', // build_runner 생성 파일
+      '.freezed.dart', // freezed 생성 파일
+      '.config.dart', // envied 등 설정 생성 파일
+      '.gr.dart', // auto_route 생성 파일
+      '.gen.dart', // flutter_gen 등 생성 파일
+      '.module.dart', // injectable 모듈 생성 파일
     ];
 
     for (final pattern in generatedPatterns) {
@@ -49,7 +47,8 @@ class FileUtils {
       final normalizedPath = filePath.replaceAll('\\', '/');
 
       // 테스트 Mock 파일 제외: **/test/**/*.mocks.dart
-      if (normalizedPath.contains('/test/') && fileName.endsWith('.mocks.dart')) {
+      if (normalizedPath.contains('/test/') &&
+          fileName.endsWith('.mocks.dart')) {
         return true;
       }
 
@@ -141,6 +140,33 @@ class FileUtils {
     final fileNameLower = fileName.toLowerCase();
 
     for (final projectName in projectNames) {
+      // Longer suffixes first to avoid partial matches
+      final suffixes = [
+        '_server',
+        '_client',
+        '_widgetbook',
+        '_console',
+        '_service',
+        '_module',
+      ];
+
+      // Try matching with suffixes first (more specific)
+      var matched = false;
+      for (final suffix in suffixes) {
+        final patternWithSuffix = '$projectName$suffix';
+        if (fileNameLower.contains(patternWithSuffix.toLowerCase())) {
+          newName = newName.replaceAll(
+            RegExp(patternWithSuffix, caseSensitive: false),
+            '{{project_name.snakeCase()}}$suffix',
+          );
+          matched = true;
+          break;
+        }
+      }
+
+      if (matched) continue;
+
+      // Try basic patterns (snake_case, no separator, param-case)
       final patterns = [
         projectName,
         projectName.replaceAll('_', ''),
@@ -315,6 +341,13 @@ class FileUtils {
     'Fastfile',
     '.envrc',
     '.firebaserc',
+    '.cursorrules',
+    '.fvmrc',
+    '.gitignore',
+    '.hintrc',
+    'CLAUDE.md',
+    'melos.yaml',
+    'pubspec.yaml',
     'CMakeLists.txt',
   ];
 
@@ -342,4 +375,3 @@ class FileUtils {
     return _processableExtensions.contains(extension);
   }
 }
-

@@ -99,14 +99,16 @@ class SyncMonorepoService {
     );
     logger.info('');
 
-    // 동기화할 디렉토리들
+    // 동기화할 디렉토리들 (backend는 serverpod_backend brick으로 별도 관리)
     final directories = [
-      'backend',
       'feature',
       'package',
       'shared',
       'scripts',
       '.github',
+      '.githooks',
+      '.cursor',
+      '.vscode',
     ];
 
     for (final dirName in directories) {
@@ -120,6 +122,13 @@ class SyncMonorepoService {
       }
     }
 
+    // backend 디렉토리 제거 (serverpod_backend brick으로 별도 관리)
+    final backendDir = Directory(path.join(targetBase.path, 'backend'));
+    if (backendDir.existsSync()) {
+      logger.info('\n🗑️  Removing backend from monorepo (managed as serverpod_backend brick)...');
+      await backendDir.delete(recursive: true);
+    }
+
     // 개별 파일 동기화
     final files = [
       'analysis_options.yaml',
@@ -128,6 +137,14 @@ class SyncMonorepoService {
       'Makefile',
       'CONTRIBUTING.md',
       'README.md',
+      '.cursorrules',
+      '.envrc',
+      '.fvmrc',
+      '.gitignore',
+      '.hintrc',
+      'CLAUDE.md',
+      'melos.yaml',
+      'pubspec.yaml',
     ];
 
     for (final fileName in files) {
@@ -142,9 +159,95 @@ class SyncMonorepoService {
     // 네트워크별 브릭 동기화 (openapi, graphql, serverpod)
     await _syncNetworkBricks(templateDir, bricksDir, config);
 
+    // serverpod_backend 브릭 동기화
+    await _syncServerpodBackend(templateDir, bricksDir, config);
+
     logger.info('\n${'=' * 60}');
     logger.info('🎉 Monorepo brick synced successfully!');
     logger.info('${'=' * 60}');
+  }
+
+  /// serverpod_backend 브릭 동기화
+  Future<void> _syncServerpodBackend(
+    Directory templateDir,
+    Directory bricksDir,
+    ProjectConfig config,
+  ) async {
+    final sourceBackendDir = Directory(path.join(templateDir.path, 'backend'));
+
+    // backend 디렉토리가 없으면 건너뛰기
+    if (!sourceBackendDir.existsSync()) {
+      logger.warn('\n⚠️  backend directory not found in template, skipping serverpod_backend sync');
+      return;
+    }
+
+    final targetBrickDir = Directory(path.join(bricksDir.path, 'serverpod_backend'));
+
+    if (!targetBrickDir.existsSync()) {
+      logger.warn('\n⚠️  serverpod_backend brick not found, creating...');
+      targetBrickDir.createSync(recursive: true);
+    }
+
+    final targetDir = Directory(path.join(targetBrickDir.path, '__brick__'));
+
+    logger.info('\n📦 Syncing serverpod_backend brick...');
+
+    // 타겟 디렉토리 생성
+    targetDir.createSync(recursive: true);
+
+    logger.info('   📋 Updating files from template...');
+
+    // 기존 프로젝트명 디렉토리들 삭제 (깨끗하게 다시 복사하기 위해)
+    for (final projectName in config.projectNames) {
+      for (final suffix in ['_client', '_server']) {
+        final oldDir = Directory(path.join(targetDir.path, '$projectName$suffix'));
+        if (oldDir.existsSync()) {
+          logger.info('   🗑️  Removing old directory: $projectName$suffix');
+          await oldDir.delete(recursive: true);
+        }
+      }
+    }
+
+    // backend 하위 디렉토리들을 개별적으로 템플릿 이름으로 복사
+    await for (final entity in sourceBackendDir.list(recursive: false)) {
+      if (entity is Directory) {
+        final dirName = path.basename(entity.path);
+
+        // 프로젝트명으로 끝나는 디렉토리 변환
+        var targetDirName = dirName;
+        for (final projectName in config.projectNames) {
+          if (dirName == '${projectName}_client') {
+            targetDirName = '{{project_name.snakeCase()}}_client';
+            break;
+          } else if (dirName == '${projectName}_server') {
+            targetDirName = '{{project_name.snakeCase()}}_server';
+            break;
+          }
+        }
+
+        final targetSubDir = Directory(path.join(targetDir.path, targetDirName));
+        logger.info('   📁 Copying $dirName → $targetDirName');
+
+        await FileUtils.copyDirectory(entity, targetSubDir, overwrite: true);
+      }
+    }
+
+    // Android Kotlin 디렉토리 경로 변환
+    logger.info('   🔄 Converting Android Kotlin directory paths...');
+    await FileUtils.convertAndroidKotlinPaths(targetDir, config.projectNames);
+
+    // 템플릿 변환
+    logger.info('   🔄 Converting to template variables...');
+
+    final patterns = TemplateConverter.buildPatterns(config);
+    var convertedFiles = 0;
+
+    // 파일 처리 (디렉토리 이름은 이미 변환됨)
+    final stats = await _processFiles(targetDir, config, patterns);
+    convertedFiles = stats['converted'] as int;
+
+    logger.info('   ✅ serverpod_backend brick synced:');
+    logger.info('      • $convertedFiles files converted');
   }
 
   /// 네트워크/백엔드별 브릭 동기화 (openapi, graphql, serverpod, supabase, firebase)
@@ -236,6 +339,33 @@ class SyncMonorepoService {
   ) async {
     logger.info('\n📁 Syncing $dirName...');
 
+    // Mason 조건부 파일들 매핑 수집 ({{#condition}}filename{{/condition}} 패턴)
+    final conditionalFileMap = <String, String>{};
+    if (targetDir.existsSync()) {
+      await for (final entity in targetDir.list(recursive: true)) {
+        if (entity is File) {
+          final fileName = path.basename(entity.path);
+          // Mason 조건부 파일명 패턴 감지: {{#condition}}actualname{{/condition}}
+          final match = RegExp(
+            r'\{\{#(\w+)\}\}(.+?)\{\{/\1\}\}',
+          ).firstMatch(fileName);
+
+          if (match != null) {
+            final condition = match.group(1)!;
+            final actualFileName = match.group(2)!;
+            final relativePath = path.relative(entity.path, from: targetDir.path);
+            final relativeDir = path.dirname(relativePath);
+
+            // 조건부 파일명 → 실제 파일명 매핑 저장
+            final key = path.join(relativeDir, actualFileName);
+            conditionalFileMap[key] = fileName;
+
+            logger.info('   🔍 Found conditional file: $actualFileName → {{#$condition}}...');
+          }
+        }
+      }
+    }
+
     // 타겟 디렉토리 생성
     targetDir.createSync(recursive: true);
 
@@ -243,6 +373,34 @@ class SyncMonorepoService {
 
     // 디렉토리 복사
     await FileUtils.copyDirectory(sourceDir, targetDir, overwrite: true);
+
+    // Mason 조건부 파일들 처리: 소스에서 복사된 파일을 조건부 이름으로 변경
+    for (final entry in conditionalFileMap.entries) {
+      final actualPath = entry.key;
+      final conditionalFileName = entry.value;
+
+      // 소스에서 복사된 실제 파일
+      final copiedFile = File(path.join(targetDir.path, actualPath));
+
+      if (copiedFile.existsSync()) {
+        // 조건부 파일명으로 이동
+        final conditionalPath = path.join(
+          path.dirname(copiedFile.path),
+          conditionalFileName,
+        );
+        final conditionalFile = File(conditionalPath);
+
+        // 기존 조건부 파일 삭제 후 새 내용으로 교체
+        if (conditionalFile.existsSync()) {
+          await conditionalFile.delete();
+        }
+
+        await copiedFile.rename(conditionalPath);
+        logger.info('   ♻️  Updated conditional file: $conditionalFileName');
+      } else {
+        logger.warn('   ⚠️  Source file not found for conditional: $actualPath');
+      }
+    }
 
     // package 디렉토리의 경우, 네트워크/백엔드 브릭들은 별도 브릭으로 관리하므로 monorepo에서 제외
     if (dirName == 'package') {
@@ -333,10 +491,28 @@ class SyncMonorepoService {
     ProjectConfig config,
     int renamedDirs,
   ) async {
-    // 하위 디렉토리부터 처리
+    // 먼저 모든 디렉토리를 깊이별로 수집 (깊은 것부터 처리하기 위해)
+    final directoriesByDepth = <int, List<Directory>>{};
+
     await for (final entity in dir.list(recursive: true)) {
       if (entity is Directory) {
-        final dirName = path.basename(entity.path);
+        final depth = entity.path.split(path.separator).length;
+        directoriesByDepth.putIfAbsent(depth, () => []).add(entity);
+      }
+    }
+
+    // 깊이가 깊은 순서대로 정렬 (하위 디렉토리부터 처리)
+    final sortedDepths = directoriesByDepth.keys.toList()..sort((a, b) => b.compareTo(a));
+
+    // 깊은 디렉토리부터 이름 변환
+    for (final depth in sortedDepths) {
+      for (final directory in directoriesByDepth[depth]!) {
+        // 디렉토리가 아직 존재하는지 확인 (상위 디렉토리 변환으로 경로가 바뀔 수 있음)
+        if (!directory.existsSync()) {
+          continue;
+        }
+
+        final dirName = path.basename(directory.path);
         final newDirName = FileUtils.convertDirectoryName(
           dirName,
           config.projectNames,
@@ -345,9 +521,9 @@ class SyncMonorepoService {
         if (newDirName != dirName) {
           try {
             final newPath = Directory(
-              path.join(path.dirname(entity.path), newDirName),
+              path.join(path.dirname(directory.path), newDirName),
             );
-            await entity.rename(newPath.path);
+            await directory.rename(newPath.path);
             renamedDirs++;
           } catch (e) {
             logger.warn('   ⚠️  Could not rename directory $dirName: $e');

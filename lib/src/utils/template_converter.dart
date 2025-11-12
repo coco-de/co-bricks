@@ -618,6 +618,15 @@ class TemplateConverter {
         'Console',
         'Widgetbook',
         'Service',
+        'Scope',
+        'Users',
+        'User',
+        'Handler',
+        'Controller',
+        'Manager',
+        'Provider',
+        'Factory',
+        'Builder',
       ]) {
         patterns.add(
           ReplacementPattern(
@@ -626,6 +635,27 @@ class TemplateConverter {
           ),
         );
       }
+
+      // _add, _remove 같은 underscore prefix 패턴도 처리
+      for (final prefix in ['_add', '_remove', '_get', '_set', '_create', '_delete', '_update']) {
+        // prefix + PascalCase + CamelCaseContinuation (e.g., _addBlueprintUsersToChat)
+        // This pattern captures any camelCase continuation after the project name
+        patterns.add(
+          ReplacementPattern(
+            RegExp('$prefix${_escapeRegex(basePascal)}([A-Z][a-zA-Z]*)'),
+            '$prefix{{project_name.pascalCase()}}\$1',
+          ),
+        );
+
+        // prefix + PascalCase (standalone)
+        patterns.add(
+          ReplacementPattern(
+            RegExp('$prefix${_escapeRegex(basePascal)}\\b'),
+            '$prefix{{project_name.pascalCase()}}',
+          ),
+        );
+      }
+
       // Pascal case 단독 패턴 (가장 마지막에 처리)
       patterns.add(
         ReplacementPattern(
