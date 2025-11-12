@@ -529,7 +529,6 @@ class SyncMonorepoService {
     );
   }
 
-
   /// 디렉토리 이름 변환
   Future<void> _convertDirectoryNames(
     Directory dir,
@@ -639,6 +638,10 @@ class SyncMonorepoService {
             !newFileName.contains('{{#has_firebase}}')) {
           conditionalDir = '{{#has_firebase}}$newFileName{{';
           finalFileName = 'has_firebase}}';
+        } else if (newFileName == 'console_service_locator.dart' &&
+            !newFileName.contains('{{#enable_admin}}')) {
+          conditionalDir = '{{#enable_admin}}$newFileName{{';
+          finalFileName = 'enable_admin}}';
         }
 
         // conditionalDir에 실제 파일명이 들어가도록 문자열 보간 적용
