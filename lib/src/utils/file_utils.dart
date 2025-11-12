@@ -20,8 +20,10 @@ class FileUtils {
       return true;
     }
 
-    // pubspec.lock 및 pubspec_overrides.yaml 제외
-    if (fileName == 'pubspec.lock' || fileName == 'pubspec_overrides.yaml') {
+    // pubspec.lock, pubspec_overrides.yaml, .flutter-plugins-dependencies 제외
+    if (fileName == 'pubspec.lock' ||
+        fileName == 'pubspec_overrides.yaml' ||
+        fileName == '.flutter-plugins-dependencies') {
       return true;
     }
 
