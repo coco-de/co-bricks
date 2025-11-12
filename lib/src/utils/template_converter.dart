@@ -440,13 +440,14 @@ class TemplateConverter {
       ]);
 
       // 기본 snake_case 패턴 (마지막에 처리)
+      // Serverpod 관련 클래스명을 제외하기 위한 negative lookahead 추가
       patterns.addAll([
         ReplacementPattern(
-          RegExp('\\b${_escapeRegex(baseSnake)}\\b'),
+          RegExp('(?<!Servo)\\b${_escapeRegex(baseSnake)}\\b(?!Service|Client|pod)'),
           '{{project_name.snakeCase()}}',
         ),
         ReplacementPattern(
-          RegExp('\\b${_escapeRegex(baseSnake.replaceAll("_", ""))}\\b'),
+          RegExp('(?<!Servo)\\b${_escapeRegex(baseSnake.replaceAll("_", ""))}\\b(?!Service|Client|pod)'),
           '{{project_name.snakeCase()}}',
         ),
       ]);
@@ -1073,6 +1074,11 @@ class TemplateConverter {
       'bool',
       'DateTime',
       'Duration',
+      // Serverpod framework classes and keywords
+      'serverpod',  // import alias
+      'ServerpodService',
+      'ServerpodClient',
+      'ServerpodClientException',
     ];
 
     // 보호된 타입명을 임시 플레이스홀더로 치환

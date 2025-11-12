@@ -125,7 +125,9 @@ class SyncMonorepoService {
     // backend 디렉토리 제거 (serverpod_backend brick으로 별도 관리)
     final backendDir = Directory(path.join(targetBase.path, 'backend'));
     if (backendDir.existsSync()) {
-      logger.info('\n🗑️  Removing backend from monorepo (managed as serverpod_backend brick)...');
+      logger.info(
+        '\n🗑️  Removing backend from monorepo (managed as serverpod_backend brick)...',
+      );
       await backendDir.delete(recursive: true);
     }
 
@@ -177,11 +179,15 @@ class SyncMonorepoService {
 
     // backend 디렉토리가 없으면 건너뛰기
     if (!sourceBackendDir.existsSync()) {
-      logger.warn('\n⚠️  backend directory not found in template, skipping serverpod_backend sync');
+      logger.warn(
+        '\n⚠️  backend directory not found in template, skipping serverpod_backend sync',
+      );
       return;
     }
 
-    final targetBrickDir = Directory(path.join(bricksDir.path, 'serverpod_backend'));
+    final targetBrickDir = Directory(
+      path.join(bricksDir.path, 'serverpod_backend'),
+    );
 
     if (!targetBrickDir.existsSync()) {
       logger.warn('\n⚠️  serverpod_backend brick not found, creating...');
@@ -200,7 +206,9 @@ class SyncMonorepoService {
     // 기존 프로젝트명 디렉토리들 삭제 (깨끗하게 다시 복사하기 위해)
     for (final projectName in config.projectNames) {
       for (final suffix in ['_client', '_server']) {
-        final oldDir = Directory(path.join(targetDir.path, '$projectName$suffix'));
+        final oldDir = Directory(
+          path.join(targetDir.path, '$projectName$suffix'),
+        );
         if (oldDir.existsSync()) {
           logger.info('   🗑️  Removing old directory: $projectName$suffix');
           await oldDir.delete(recursive: true);
@@ -225,7 +233,9 @@ class SyncMonorepoService {
           }
         }
 
-        final targetSubDir = Directory(path.join(targetDir.path, targetDirName));
+        final targetSubDir = Directory(
+          path.join(targetDir.path, targetDirName),
+        );
         logger.info('   📁 Copying $dirName → $targetDirName');
 
         await FileUtils.copyDirectory(entity, targetSubDir, overwrite: true);
@@ -353,14 +363,19 @@ class SyncMonorepoService {
           if (match != null) {
             final condition = match.group(1)!;
             final actualFileName = match.group(2)!;
-            final relativePath = path.relative(entity.path, from: targetDir.path);
+            final relativePath = path.relative(
+              entity.path,
+              from: targetDir.path,
+            );
             final relativeDir = path.dirname(relativePath);
 
             // 조건부 파일명 → 실제 파일명 매핑 저장
             final key = path.join(relativeDir, actualFileName);
             conditionalFileMap[key] = fileName;
 
-            logger.info('   🔍 Found conditional file: $actualFileName → {{#$condition}}...');
+            logger.info(
+              '   🔍 Found conditional file: $actualFileName → {{#$condition}}...',
+            );
           }
         }
       }
@@ -398,7 +413,9 @@ class SyncMonorepoService {
         await copiedFile.rename(conditionalPath);
         logger.info('   ♻️  Updated conditional file: $conditionalFileName');
       } else {
-        logger.warn('   ⚠️  Source file not found for conditional: $actualPath');
+        logger.warn(
+          '   ⚠️  Source file not found for conditional: $actualPath',
+        );
       }
     }
 
@@ -564,7 +581,8 @@ class SyncMonorepoService {
     }
 
     // 깊이가 깊은 순서대로 정렬 (하위 디렉토리부터 처리)
-    final sortedDepths = directoriesByDepth.keys.toList()..sort((a, b) => b.compareTo(a));
+    final sortedDepths = directoriesByDepth.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
 
     // 깊은 디렉토리부터 이름 변환
     for (final depth in sortedDepths) {
