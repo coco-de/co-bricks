@@ -464,10 +464,7 @@ class SyncMonorepoService {
       await _convertConsoleToConditionalDir(targetDir);
     }
 
-    // 기존 네트워크별 mixin 파일 정리 (조건부 디렉토리 생성 전)
-    await _cleanupNetworkMixinFiles(targetDir);
-
-    // 파일 처리
+    // 파일 처리 (네트워크별 mixin 파일들을 조건부 디렉토리로 변환)
     final stats = await _processFiles(targetDir, config, patterns);
     convertedFiles = stats['converted'] as int;
 
@@ -532,37 +529,6 @@ class SyncMonorepoService {
     );
   }
 
-  /// 네트워크별 mixin 파일 정리 (조건부 디렉토리 생성 전)
-  /// brick에 이미 존재하는 네트워크/백엔드별 mixin 파일들을 삭제
-  Future<void> _cleanupNetworkMixinFiles(Directory dir) async {
-    final mixinPatterns = [
-      '_openapi_mixin.dart',
-      '_serverpod_mixin.dart',
-      '_graphql_mixin.dart',
-      '_supabase_mixin.dart',
-      '_firebase_mixin.dart',
-    ];
-
-    await for (final entity in dir.list(recursive: true)) {
-      if (entity is File) {
-        final fileName = path.basename(entity.path);
-
-        // 네트워크별 mixin 파일인지 확인
-        final isNetworkMixin = mixinPatterns.any(
-          (pattern) => fileName.endsWith(pattern),
-        );
-
-        if (isNetworkMixin) {
-          try {
-            await entity.delete();
-            logger.info('   🗑️  Cleaning up old mixin file: $fileName');
-          } catch (e) {
-            logger.warn('   ⚠️  Could not delete old mixin file $fileName: $e');
-          }
-        }
-      }
-    }
-  }
 
   /// 디렉토리 이름 변환
   Future<void> _convertDirectoryNames(
@@ -1188,15 +1154,15 @@ class SyncMonorepoService {
       buffer.writeln('    this._podService,');
       buffer.writeln('    this.$databaseField,');
       buffer.writeln('  );');
-      buffer.writeln('  final pod.PodService _podService;');
+      buffer.writeln('  final ServerpodService _podService;');
       buffer.writeln('  final $databaseType $databaseField;');
     } else {
       buffer.writeln('  $className();');
-      buffer.writeln('  final pod.PodService _podService;');
+      buffer.writeln('  final ServerpodService _podService;');
     }
     buffer.writeln();
     buffer.writeln('  @override');
-    buffer.writeln('  pod.Client get client => _podService.client;');
+    buffer.writeln('  ServerpodClient get client => _podService.client;');
     buffer.writeln();
     for (final dao in daoGetters) {
       buffer.writeln('  @override');
