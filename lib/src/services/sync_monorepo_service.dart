@@ -459,6 +459,11 @@ class SyncMonorepoService {
   }
 
   /// feature 디렉토리의 console을 조건부 디렉토리로 변환
+  ///
+  /// Mason의 조건부 디렉토리는 파일 시스템에서 다음과 같이 구성됨:
+  /// - {{#enable_admin}}console{{/ 디렉토리 (opening tag + content + {{/)
+  /// - 그 안에 enable_admin}} 파일 (closing tag)
+  /// 이렇게 하면 Mason이 {{#enable_admin}}console{{/enable_admin}} 형태로 인식함
   Future<void> _convertConsoleToConditionalDir(Directory featureDir) async {
     final consoleDir = Directory(path.join(featureDir.path, 'console'));
 
@@ -466,26 +471,30 @@ class SyncMonorepoService {
       return;
     }
 
-    // 조건부 디렉토리 이름 (Mason의 조건부 디렉토리 구문 사용)
-    final conditionalDirName = r'{{#enable_admin}}console{{\enable_admin}}';
-    final conditionalDir = Directory(
-      path.join(featureDir.path, conditionalDirName),
-    );
+    // Mason 조건부 디렉토리 구조
+    // 1단계: {{#enable_admin}}console{{/ 디렉토리
+    const outerDirName = r'{{#enable_admin}}console{{';
+    final outerDir = Directory(path.join(featureDir.path, outerDirName));
 
     logger.info('   🔄 Converting console to conditional directory...');
 
     // 기존 조건부 디렉토리가 있으면 삭제
-    if (conditionalDir.existsSync()) {
-      await conditionalDir.delete(recursive: true);
+    if (outerDir.existsSync()) {
+      await outerDir.delete(recursive: true);
     }
 
-    // 조건부 디렉토리 생성
-    conditionalDir.createSync(recursive: true);
+    // 외부 디렉토리 생성
+    outerDir.createSync(recursive: true);
 
-    // console 디렉토리의 모든 내용을 조건부 디렉토리로 복사
+    // 2단계: 내부에 enable_admin}} 디렉토리 생성 (슬래시 없이)
+    const innerDirName = 'enable_admin}}';
+    final innerDir = Directory(path.join(outerDir.path, innerDirName));
+    innerDir.createSync(recursive: true);
+
+    // console 디렉토리의 모든 내용을 innerDir로 복사
     await for (final entity in consoleDir.list(recursive: false)) {
       final entityName = path.basename(entity.path);
-      final targetPath = path.join(conditionalDir.path, entityName);
+      final targetPath = path.join(innerDir.path, entityName);
 
       if (entity is Directory) {
         await FileUtils.copyDirectory(
@@ -501,7 +510,9 @@ class SyncMonorepoService {
     // 원본 console 디렉토리 삭제
     await consoleDir.delete(recursive: true);
 
-    logger.info('   ✅ Converted console → $conditionalDirName');
+    logger.info(
+      '   ✅ Converted console → {{#enable_admin}}console{{/enable_admin}}',
+    );
   }
 
   /// 네트워크별 mixin 파일 정리 (조건부 디렉토리 생성 전)
