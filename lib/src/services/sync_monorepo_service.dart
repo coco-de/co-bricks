@@ -442,6 +442,11 @@ class SyncMonorepoService {
     // 디렉토리 이름 변환 (하위에서 상위로)
     await _convertDirectoryNames(targetDir, config, renamedDirs);
 
+    // feature 디렉토리의 console을 조건부 디렉토리로 변환
+    if (dirName == 'feature') {
+      await _convertConsoleToConditionalDir(targetDir);
+    }
+
     // 기존 네트워크별 mixin 파일 정리 (조건부 디렉토리 생성 전)
     await _cleanupNetworkMixinFiles(targetDir);
 
@@ -451,6 +456,52 @@ class SyncMonorepoService {
 
     logger.info('   ✅ $dirName synced:');
     logger.info('      • $convertedFiles files converted');
+  }
+
+  /// feature 디렉토리의 console을 조건부 디렉토리로 변환
+  Future<void> _convertConsoleToConditionalDir(Directory featureDir) async {
+    final consoleDir = Directory(path.join(featureDir.path, 'console'));
+
+    if (!consoleDir.existsSync()) {
+      return;
+    }
+
+    // 조건부 디렉토리 이름 (Mason의 조건부 디렉토리 구문 사용)
+    final conditionalDirName = r'{{#enable_admin}}console{{\enable_admin}}';
+    final conditionalDir = Directory(
+      path.join(featureDir.path, conditionalDirName),
+    );
+
+    logger.info('   🔄 Converting console to conditional directory...');
+
+    // 기존 조건부 디렉토리가 있으면 삭제
+    if (conditionalDir.existsSync()) {
+      await conditionalDir.delete(recursive: true);
+    }
+
+    // 조건부 디렉토리 생성
+    conditionalDir.createSync(recursive: true);
+
+    // console 디렉토리의 모든 내용을 조건부 디렉토리로 복사
+    await for (final entity in consoleDir.list(recursive: false)) {
+      final entityName = path.basename(entity.path);
+      final targetPath = path.join(conditionalDir.path, entityName);
+
+      if (entity is Directory) {
+        await FileUtils.copyDirectory(
+          entity,
+          Directory(targetPath),
+          overwrite: true,
+        );
+      } else if (entity is File) {
+        await entity.copy(targetPath);
+      }
+    }
+
+    // 원본 console 디렉토리 삭제
+    await consoleDir.delete(recursive: true);
+
+    logger.info('   ✅ Converted console → $conditionalDirName');
   }
 
   /// 네트워크별 mixin 파일 정리 (조건부 디렉토리 생성 전)
