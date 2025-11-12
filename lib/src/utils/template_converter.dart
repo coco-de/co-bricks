@@ -42,6 +42,19 @@ class TemplateConverter {
       patterns.addAll(_buildGitHubOrgPatterns(config.githubOrg!));
     }
 
+    // 0.5. Apple App ID 패턴 (team_id + bundle ID 조합, Firebase보다 먼저!)
+    if (config.teamId != null) {
+      patterns.addAll(
+        _buildAppleAppIdPatterns(
+          config.teamId!,
+          projectNames,
+          orgNames,
+          orgTlds,
+          randomProjectIds,
+        ),
+      );
+    }
+
     // 1. Apple Developer ID 패턴
     if (config.appleDeveloperId != null) {
       patterns.addAll(_buildAppleDeveloperIdPatterns(config.appleDeveloperId!));
@@ -76,7 +89,7 @@ class TemplateConverter {
     patterns.addAll(_buildRandomProjectIdPatterns(randomProjectIds));
 
     // 10. Apple Team ID 패턴
-    patterns.addAll(_buildAppleTeamIdPatterns());
+    patterns.addAll(_buildAppleTeamIdPatterns(config));
 
     // 11. GitHub 저장소명 패턴
     if (config.githubRepo != null) {
@@ -881,14 +894,111 @@ class TemplateConverter {
     return patterns;
   }
 
+  /// Apple App ID 패턴 생성 (team_id + bundle ID 조합)
+  static List<ReplacementPattern> _buildAppleAppIdPatterns(
+    String teamId,
+    List<String> projectNames,
+    List<String> orgNames,
+    List<String> orgTlds,
+    List<String> randomProjectIds,
+  ) {
+    final patterns = <ReplacementPattern>[];
+
+    for (final projectName in projectNames) {
+      for (final orgName in orgNames) {
+        final orgLower = orgName.toLowerCase();
+        final projectDot = projectName.toLowerCase();
+
+        for (final orgTld in orgTlds) {
+          if (randomProjectIds.isNotEmpty) {
+            for (final randomId in randomProjectIds) {
+              // team_id.org_tld.org_name.project_name.randomId.dev
+              patterns.add(
+                ReplacementPattern(
+                  RegExp(
+                    '${_escapeRegex(teamId)}\\.${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.${_escapeRegex(randomId)}\\.dev',
+                  ),
+                  '{{team_id}}.{{org_tld}}.{{org_name.lowerCase()}}.{{project_name.dotCase()}}.{{randomprojectid}}.dev',
+                ),
+              );
+
+              // team_id.org_tld.org_name.project_name.randomId.stg
+              patterns.add(
+                ReplacementPattern(
+                  RegExp(
+                    '${_escapeRegex(teamId)}\\.${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.${_escapeRegex(randomId)}\\.stg',
+                  ),
+                  '{{team_id}}.{{org_tld}}.{{org_name.lowerCase()}}.{{project_name.dotCase()}}.{{randomprojectid}}.stg',
+                ),
+              );
+
+              // team_id.org_tld.org_name.project_name.randomId (끝에 console이 올 수 있음)
+              patterns.add(
+                ReplacementPattern(
+                  RegExp(
+                    '${_escapeRegex(teamId)}\\.${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.${_escapeRegex(randomId)}(?!\\.)',
+                  ),
+                  '{{team_id}}.{{org_tld}}.{{org_name.lowerCase()}}.{{project_name.dotCase()}}.{{randomprojectid}}',
+                ),
+              );
+
+              // console variants
+              patterns.addAll([
+                ReplacementPattern(
+                  RegExp(
+                    '${_escapeRegex(teamId)}\\.${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.${_escapeRegex(randomId)}\\.console\\.dev',
+                  ),
+                  '{{team_id}}.{{org_tld}}.{{org_name.lowerCase()}}.{{project_name.dotCase()}}.{{randomprojectid}}.console.dev',
+                ),
+                ReplacementPattern(
+                  RegExp(
+                    '${_escapeRegex(teamId)}\\.${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.${_escapeRegex(randomId)}\\.console\\.stg',
+                  ),
+                  '{{team_id}}.{{org_tld}}.{{org_name.lowerCase()}}.{{project_name.dotCase()}}.{{randomprojectid}}.console.stg',
+                ),
+                ReplacementPattern(
+                  RegExp(
+                    '${_escapeRegex(teamId)}\\.${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.${_escapeRegex(randomId)}\\.console',
+                  ),
+                  '{{team_id}}.{{org_tld}}.{{org_name.lowerCase()}}.{{project_name.dotCase()}}.{{randomprojectid}}.console',
+                ),
+              ]);
+            }
+          }
+        }
+      }
+    }
+
+    return patterns;
+  }
+
   /// Apple Team ID 패턴 생성
-  static List<ReplacementPattern> _buildAppleTeamIdPatterns() {
-    return [
-      ReplacementPattern(RegExp(r'\b127679498\b'), '{{itc_team_id}}'),
-      ReplacementPattern(RegExp(r'\bDNNK8RH9GY\b'), '{{team_id}}'),
-      ReplacementPattern(RegExp(r'\bDWKVPW88Q3\b'), '{{team_id}}'),
-      ReplacementPattern(RegExp(r'\bY7BR9G2CVC\b'), '{{team_id}}'),
-    ];
+  static List<ReplacementPattern> _buildAppleTeamIdPatterns(
+    ProjectConfig config,
+  ) {
+    final patterns = <ReplacementPattern>[];
+
+    // ITC Team ID 패턴
+    if (config.itcTeamId != null) {
+      patterns.add(
+        ReplacementPattern(
+          RegExp('\\b${_escapeRegex(config.itcTeamId!)}\\b'),
+          '{{itc_team_id}}',
+        ),
+      );
+    }
+
+    // Developer Team ID 패턴
+    if (config.teamId != null) {
+      patterns.add(
+        ReplacementPattern(
+          RegExp('\\b${_escapeRegex(config.teamId!)}\\b'),
+          '{{team_id}}',
+        ),
+      );
+    }
+
+    return patterns;
   }
 
   /// Apple Developer ID 패턴 생성 (가장 먼저 적용)
@@ -1096,6 +1206,9 @@ class TemplateConverter {
     for (final pattern in patterns) {
       result = result.replaceAll(pattern.pattern, pattern.replacement);
     }
+
+    // _podService를 _serverpodService로 변환
+    result = result.replaceAll('_podService', '_serverpodService');
 
     // 보호된 타입명 복원
     for (final entry in typePlaceholders.entries) {

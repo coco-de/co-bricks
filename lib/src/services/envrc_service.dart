@@ -13,6 +13,8 @@ class ProjectConfig {
     this.githubRepo,
     this.randomProjectId,
     this.appleDeveloperId,
+    this.teamId,
+    this.itcTeamId,
   });
 
   final String projectName;
@@ -23,6 +25,8 @@ class ProjectConfig {
   final String? githubRepo;
   final String? randomProjectId;
   final String? appleDeveloperId;
+  final String? teamId;
+  final String? itcTeamId;
 
   /// 프로젝트명 리스트 (.envrc에서 파싱한 값만 사용)
   List<String> get projectNames => [projectName];
@@ -68,6 +72,8 @@ class EnvrcService {
     String? githubRepo;
     String? randomProjectId;
     String? appleDeveloperId;
+    String? teamId;
+    String? itcTeamId;
 
     for (final line in lines) {
       final trimmed = line.trim();
@@ -113,6 +119,12 @@ class EnvrcService {
           case 'APPLE_DEVELOPER_ID':
             appleDeveloperId = value;
             break;
+          case 'TEAM_ID':
+            teamId = value;
+            break;
+          case 'ITC_TEAM_ID':
+            itcTeamId = value;
+            break;
         }
       }
     }
@@ -147,6 +159,8 @@ class EnvrcService {
       githubRepo: githubRepo,
       randomProjectId: randomProjectId,
       appleDeveloperId: appleDeveloperId,
+      teamId: teamId,
+      itcTeamId: itcTeamId,
     );
   }
 

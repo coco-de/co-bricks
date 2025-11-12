@@ -1627,15 +1627,22 @@ class SyncMonorepoService {
     // 텍스트 파일이면 내용 변환
     if (FileUtils.shouldProcessFile(targetFile)) {
       try {
-        final content = await targetFile.readAsString();
-        final patterns = TemplateConverter.buildPatterns(config);
-        final convertedContent = TemplateConverter.convertContent(
-          content,
-          patterns,
-        );
+        var content = await targetFile.readAsString();
 
-        if (convertedContent != content) {
-          await targetFile.writeAsString(convertedContent);
+        // melos.yaml과 pubspec.yaml은 특별 처리
+        if (fileName == 'melos.yaml' || fileName == 'pubspec.yaml') {
+          content = _convertMelosYaml(content, config);
+        } else {
+          final patterns = TemplateConverter.buildPatterns(config);
+          content = TemplateConverter.convertContent(
+            content,
+            patterns,
+          );
+        }
+
+        final originalContent = await sourceFile.readAsString();
+        if (content != originalContent) {
+          await targetFile.writeAsString(content);
           logger.info('   ✅ $fileName converted');
         } else {
           logger.info('   ✅ $fileName copied');
@@ -1644,5 +1651,437 @@ class SyncMonorepoService {
         logger.info('   ✅ $fileName copied (binary)');
       }
     }
+  }
+
+  /// melos.yaml 또는 pubspec.yaml 파일 변환
+  String _convertMelosYaml(String content, ProjectConfig config) {
+    final lines = content.split('\n');
+    final result = <String>[];
+    final projectName = config.projectName;
+    var inPackagesSection = false;
+    var inWorkspaceSection = false;
+    var inScriptsSection = false;
+    var inEnableAdminBlock = false;
+    var inHasServerpodBlock = false;
+    var scriptIndent = '';
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      final trimmed = line.trim();
+
+      // packages: 또는 workspace: 섹션 시작 감지
+      if (trimmed == 'packages:' || trimmed == 'workspace:') {
+        inPackagesSection = trimmed == 'packages:';
+        inWorkspaceSection = trimmed == 'workspace:';
+        result.add(line);
+        continue;
+      }
+
+      // scripts: 섹션 시작 감지
+      if (trimmed == 'scripts:' || (line.startsWith('  ') && trimmed == 'scripts:')) {
+        inScriptsSection = true;
+        scriptIndent = line.substring(0, line.indexOf('scripts:'));
+        result.add(line);
+        continue;
+      }
+
+      // 섹션이 끝났는지 확인 (다음 최상위 키 발견)
+      if ((inPackagesSection || inWorkspaceSection) &&
+          line.isNotEmpty && !line.startsWith(' ')) {
+        // has_serverpod 블록이 열려있으면 닫기
+        if (inHasServerpodBlock) {
+          result.add('{{/has_serverpod}}');
+          inHasServerpodBlock = false;
+        }
+        // enable_admin 블록이 열려있으면 닫기
+        if (inEnableAdminBlock) {
+          result.add('{{/enable_admin}}');
+          inEnableAdminBlock = false;
+        }
+        inPackagesSection = false;
+        inWorkspaceSection = false;
+      }
+
+      // scripts 섹션이 끝났는지 확인
+      if (inScriptsSection && line.isNotEmpty && !line.startsWith(' ')) {
+        if (inEnableAdminBlock) {
+          result.add('{{/enable_admin}}');
+          inEnableAdminBlock = false;
+        }
+        inScriptsSection = false;
+      }
+
+      // packages/workspace 섹션 내부 처리
+      if ((inPackagesSection || inWorkspaceSection) && trimmed.startsWith('- ')) {
+        // console app 패키지 처리
+        if (line.contains('${projectName}_console') ||
+            line.contains('backend/${projectName}_console')) {
+          // has_serverpod 블록이 열려있으면 닫기
+          if (inHasServerpodBlock) {
+            result.add('{{/has_serverpod}}');
+            inHasServerpodBlock = false;
+          }
+          if (!inEnableAdminBlock) {
+            result.add('{{#enable_admin}}');
+            inEnableAdminBlock = true;
+          }
+          final patterns = TemplateConverter.buildPatterns(config);
+          line = TemplateConverter.convertContent(line, patterns);
+          result.add(line);
+          continue;
+        }
+
+        // console feature 패키지 처리
+        if (line.contains('feature/console/')) {
+          // has_serverpod 블록이 열려있으면 닫기
+          if (inHasServerpodBlock) {
+            result.add('{{/has_serverpod}}');
+            inHasServerpodBlock = false;
+          }
+          if (!inEnableAdminBlock) {
+            result.add('{{#enable_admin}}');
+            inEnableAdminBlock = true;
+          }
+          final patterns = TemplateConverter.buildPatterns(config);
+          line = TemplateConverter.convertContent(line, patterns);
+          result.add(line);
+          continue;
+        }
+
+        // backend server/client 패키지 처리 (has_serverpod)
+        if (line.contains('backend/${projectName}_server') ||
+            line.contains('backend/${projectName}_client')) {
+          // enable_admin 블록이 열려있으면 닫기
+          if (inEnableAdminBlock) {
+            result.add('{{/enable_admin}}');
+            inEnableAdminBlock = false;
+          }
+          if (!inHasServerpodBlock) {
+            result.add('{{#has_serverpod}}');
+            inHasServerpodBlock = true;
+          }
+          final patterns = TemplateConverter.buildPatterns(config);
+          line = TemplateConverter.convertContent(line, patterns);
+          result.add(line);
+
+          // client가 오면 블록을 닫음
+          if (line.contains('_client')) {
+            result.add('{{/has_serverpod}}');
+            inHasServerpodBlock = false;
+          }
+          continue;
+        }
+
+        // enable_admin/has_serverpod 블록이 열려있고, 해당되지 않는 패키지를 만나면 블록 닫기
+        if (inHasServerpodBlock) {
+          result.add('{{/has_serverpod}}');
+          inHasServerpodBlock = false;
+        }
+        if (inEnableAdminBlock) {
+          result.add('{{/enable_admin}}');
+          inEnableAdminBlock = false;
+        }
+
+        // widgetbook 패키지 처리
+        if (line.contains('${projectName}_widgetbook')) {
+          final patterns = TemplateConverter.buildPatterns(config);
+          line = TemplateConverter.convertContent(line, patterns);
+          result.add(line);
+          continue;
+        }
+
+        // resources 패키지 처리 - 다음 라인에 백엔드 서비스 패키지들 추가
+        if (line.contains('package/resources')) {
+          result.add('  - package/resources{{#has_serverpod}}');
+          result.add('  - package/serverpod_service{{/has_serverpod}}{{#has_openapi}}');
+          result.add('  - package/openapi_service');
+          result.add('  - package/openapi{{/has_openapi}}');
+          continue;
+        }
+
+        // serverpod_service 패키지 처리 (이미 resources에서 처리됨)
+        if (line.contains('serverpod_service')) {
+          continue;
+        }
+
+        // 일반 패키지 처리
+        final patterns = TemplateConverter.buildPatterns(config);
+        line = TemplateConverter.convertContent(line, patterns);
+        result.add(line);
+        continue;
+      }
+
+      // scripts 섹션 내부 처리 - console_router 같은 스크립트를 조건부로
+      if (inScriptsSection) {
+        // console_router 관련 스크립트 블록 시작 감지
+        if (trimmed.startsWith('generate:console_router:') ||
+            trimmed.startsWith('web:run:fixed-port:console:') ||
+            trimmed.startsWith('dependBuild:feature:console:')) {
+          if (!inEnableAdminBlock) {
+            result.add('{{#enable_admin}}');
+            inEnableAdminBlock = true;
+          }
+        }
+
+        // console 관련 echo 라인 감지 (단일 라인 조건부 처리)
+        if (line.contains('echo') &&
+            (line.contains('console_router') ||
+             (line.contains('Console') && line.contains('dependBuild:feature:console')))) {
+          // echo 라인을 조건부로 감싸기
+          final patterns = TemplateConverter.buildPatterns(config);
+          line = TemplateConverter.convertContent(line, patterns);
+          result.add('{{#enable_admin}}');
+          result.add(line);
+          result.add('{{/enable_admin}}');
+          continue;
+        }
+
+        // 스크립트 블록이 끝나는지 확인 (다음 스크립트 시작)
+        // 스크립트 이름 레벨 (2 spaces after scriptIndent)에서 새로운 스크립트가 시작되면
+        if (inEnableAdminBlock &&
+            line.length >= scriptIndent.length + 2 &&
+            trimmed.isNotEmpty &&
+            trimmed.endsWith(':') &&
+            !trimmed.startsWith('run:') &&
+            !trimmed.startsWith('description:') &&
+            !trimmed.startsWith('packageFilters:') &&
+            !trimmed.startsWith('generate:console') &&
+            !trimmed.startsWith('web:run:fixed-port:console') &&
+            !trimmed.startsWith('dependBuild:feature:console')) {
+          result.add('{{/enable_admin}}');
+          inEnableAdminBlock = false;
+        }
+      }
+
+      // 일반 패턴 변환 적용
+      final patterns = TemplateConverter.buildPatterns(config);
+      line = TemplateConverter.convertContent(line, patterns);
+      result.add(line);
+    }
+
+    // 파일 끝에서 블록이 열려있으면 닫기
+    if (inHasServerpodBlock) {
+      result.add('{{/has_serverpod}}');
+    }
+    if (inEnableAdminBlock) {
+      result.add('{{/enable_admin}}');
+    }
+
+    // paramCase를 snakeCase로 변환
+    var finalResult = result.join('\n');
+    finalResult = finalResult.replaceAll(
+      '{{project_name.paramCase()}}',
+      '{{project_name.snakeCase()}}',
+    );
+
+    // build:select: 스크립트의 ignore 목록에 조건부 항목 추가
+    finalResult = _addConditionalIgnoreItems(finalResult);
+
+    // dependencies 섹션에 조건부 패키지 태그 추가
+    finalResult = _addConditionalDependencyTags(finalResult);
+
+    return finalResult;
+  }
+
+  /// build:select: 스크립트의 ignore 목록에 조건부 항목 추가
+  String _addConditionalIgnoreItems(String content) {
+    // build:select: 스크립트 블록을 찾아서 ignore 목록 마지막에 조건부 항목 추가
+    final lines = content.split('\n');
+    final result = <String>[];
+    var inBuildSelectIgnore = false;
+    var ignoreIndent = '';
+    var lastIgnoreLineIndex = -1;
+
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      final trimmed = line.trim();
+
+      // build:select: 스크립트의 ignore: 섹션 감지
+      if (line.contains('build:select:')) {
+        // build:select: 블록 시작
+        result.add(line);
+        // 다음 줄들을 처리하면서 ignore: 섹션 찾기
+        continue;
+      }
+
+      // ignore: 섹션 시작 감지 (build:select 내부)
+      if (trimmed == 'ignore:' && i > 0) {
+        // 이전에 build:select를 만났는지 확인
+        var foundBuildSelect = false;
+        for (var j = i - 1; j >= 0 && j > i - 20; j--) {
+          if (lines[j].contains('build:select:')) {
+            foundBuildSelect = true;
+            break;
+          }
+        }
+        if (foundBuildSelect) {
+          inBuildSelectIgnore = true;
+          ignoreIndent = line.substring(0, line.indexOf('ignore:'));
+          result.add(line);
+          continue;
+        }
+      }
+
+      // ignore 목록 항목 추적
+      if (inBuildSelectIgnore && trimmed.startsWith('-')) {
+        lastIgnoreLineIndex = result.length;
+      }
+
+      // ignore 목록이 끝나는 시점 감지 (dependsOn:)
+      if (inBuildSelectIgnore && trimmed == 'dependsOn:') {
+        // 마지막 ignore 항목에 {{#has_serverpod}} 태그 추가
+        if (lastIgnoreLineIndex >= 0) {
+          result[lastIgnoreLineIndex] =
+              '${result[lastIgnoreLineIndex]}{{#has_serverpod}}';
+        }
+        // dependsOn: 직전에 조건부 항목 추가
+        final itemIndent = '$ignoreIndent      ';
+        result
+          ..add('$itemIndent- "serverpod_service"{{/has_serverpod}}{{#has_openapi}}')
+          ..add('$itemIndent- "openapi_service"')
+          ..add('$itemIndent- "openapi"{{/has_openapi}}');
+        inBuildSelectIgnore = false;
+      }
+
+      result.add(line);
+    }
+
+    return result.join('\n');
+  }
+
+  /// dependencies 섹션에 조건부 백엔드 패키지 태그 추가 (인라인 형식)
+  String _addConditionalDependencyTags(String content) {
+    final lines = content.split('\n');
+    final result = <String>[];
+
+    // serverpod 관련 패키지들 (첫 번째 그룹과 두 번째 그룹)
+    // 첫 번째 그룹: jaspr 관련 (jaspr ~ jaspr_serverpod)
+    const firstServerpodGroupEnd = 'jaspr_serverpod:';
+    // 두 번째 그룹: serverpod 코어 (serverpod ~ serverpod_serialization)
+    const secondServerpodGroupStart = 'serverpod:';
+    final lastServerpodPackages = [
+      'serverpod_serialization:',
+      'serverpod_test:',
+    ];
+
+    // dev_dependencies의 serverpod 그룹 종료
+    const devServerpodGroupEnd = 'jaspr_web_compilers:';
+
+    // openapi 관련 패키지들 (첫 패키지와 마지막 패키지)
+    const firstOpenapiPkg = 'dio:';
+    final lastOpenapiPackages = [
+      'json_annotation:',
+      'retrofit:',
+    ];
+
+    // graphql 관련 패키지 (첫 패키지이자 마지막 패키지)
+    const graphqlPkg = 'graphql_flutter:';
+
+    // intl 다음에 serverpod 블록이 시작되는 특수 케이스 (dependencies)
+    const intlPkg = 'intl:';
+    // mcp_toolkit 다음에 serverpod 두 번째 그룹 시작
+    const mcpToolkitPkg = 'mcp_toolkit:';
+    // injectable_generator 다음에 serverpod 블록이 시작 (dev_dependencies)
+    const injectableGeneratorPkg = 'injectable_generator:';
+    // pubspec_dependency_sorter 다음에 serverpod 세 번째 그룹 시작
+    const pubspecDependencySorterPkg = 'pubspec_dependency_sorter:';
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      final trimmed = line.trim();
+
+      // intl, injectable_generator, pubspec_dependency_sorter 라인에
+      // {{#has_serverpod}} 추가
+      if (trimmed.startsWith(intlPkg) ||
+          trimmed.startsWith(injectableGeneratorPkg) ||
+          trimmed.startsWith(pubspecDependencySorterPkg)) {
+        line = '$line{{#has_serverpod}}';
+        result.add(line);
+        continue;
+      }
+
+      // jaspr_serverpod (첫 번째 그룹 종료) 뒤에 {{/has_serverpod}} 추가
+      if (trimmed.startsWith(firstServerpodGroupEnd)) {
+        line = '$line{{/has_serverpod}}';
+        result.add(line);
+        continue;
+      }
+
+      // mcp_toolkit 뒤에 {{#has_serverpod}} 추가 (두 번째 그룹 시작)
+      if (trimmed.startsWith(mcpToolkitPkg)) {
+        line = '$line{{#has_serverpod}}';
+        result.add(line);
+        continue;
+      }
+
+      // serverpod_serialization/serverpod_test (두 번째 그룹 종료) 뒤에 {{/has_serverpod}}
+      var isLastServerpod = false;
+      for (final pkg in lastServerpodPackages) {
+        if (trimmed.startsWith(pkg)) {
+          line = '$line{{/has_serverpod}}';
+          isLastServerpod = true;
+          break;
+        }
+      }
+      if (isLastServerpod) {
+        result.add(line);
+        continue;
+      }
+
+      // jaspr_web_compilers (dev_dependencies 그룹 종료) 뒤에 {{/has_serverpod}}
+      if (trimmed.startsWith(devServerpodGroupEnd)) {
+        line = '$line{{/has_serverpod}}';
+        result.add(line);
+        continue;
+      }
+
+      // skeletonizer 다음에 openapi/graphql 블록 준비
+      if (trimmed.startsWith('skeletonizer:')) {
+        // 다음 줄에 실제 openapi 패키지가 있는지 확인
+        final hasOpenapiPkg = i + 1 < lines.length &&
+            lines[i + 1].trim().startsWith(firstOpenapiPkg);
+
+        if (hasOpenapiPkg) {
+          // openapi 패키지가 있으면 블록 시작만
+          line = '$line{{#has_openapi}}';
+        } else {
+          // openapi 패키지가 없으면 빈 블록 구조 생성
+          line = '$line{{#has_openapi}}{{/has_openapi}}{{#has_graphql}}{{/has_graphql}}';
+        }
+        result.add(line);
+        continue;
+      }
+
+      // openapi 마지막 패키지에 {{/has_openapi}}{{#has_graphql}} 추가 (인라인)
+      var isLastOpenapi = false;
+      for (final pkg in lastOpenapiPackages) {
+        if (trimmed.startsWith(pkg)) {
+          // 다음 줄이 graphql인지 확인
+          if (i + 1 < lines.length &&
+              lines[i + 1].trim().startsWith(graphqlPkg)) {
+            line = '$line{{/has_openapi}}{{#has_graphql}}';
+          } else {
+            line = '$line{{/has_openapi}}';
+          }
+          isLastOpenapi = true;
+          break;
+        }
+      }
+      if (isLastOpenapi) {
+        result.add(line);
+        continue;
+      }
+
+      // graphql 패키지에 {{/has_graphql}} 추가 (인라인)
+      if (trimmed.startsWith(graphqlPkg)) {
+        line = '$line{{/has_graphql}}';
+        result.add(line);
+        continue;
+      }
+
+      result.add(line);
+    }
+
+    return result.join('\n');
   }
 }

@@ -378,6 +378,7 @@ class FileUtils {
     'melos.yaml',
     'pubspec.yaml',
     'CMakeLists.txt',
+    'apple-app-site-association',
   ];
 
   /// 파일을 처리해야 하는지 확인
