@@ -382,6 +382,13 @@ class SyncAppService {
       iconPaths.add(iosIconPath);
     }
 
+    // macOS Assets.xcassets
+    final macosIconPath =
+        path.join(brickDir.path, 'macos/Runner/Assets.xcassets');
+    if (Directory(macosIconPath).existsSync()) {
+      iconPaths.add(macosIconPath);
+    }
+
     // Android icon directories (main, development, staging flavors)
     final flavors = ['main', 'development', 'staging'];
     final densities = [
