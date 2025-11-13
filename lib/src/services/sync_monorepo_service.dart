@@ -232,6 +232,25 @@ class SyncMonorepoService {
     // 타겟 디렉토리 생성
     targetDir.createSync(recursive: true);
 
+    // passwords.yaml 파일 백업
+    final passwordsBackup = <String, List<int>>{};
+    final serverDirPattern =
+        RegExp(r'^{{project_name\.snakeCase\(\)}}_server$');
+    for (final entity in targetDir.listSync(recursive: false)) {
+      if (entity is Directory) {
+        final dirName = path.basename(entity.path);
+        if (serverDirPattern.hasMatch(dirName)) {
+          final passwordsPath =
+              path.join(entity.path, 'config', 'passwords.yaml');
+          final passwordsFile = File(passwordsPath);
+          if (passwordsFile.existsSync()) {
+            passwordsBackup[passwordsPath] =
+                await passwordsFile.readAsBytes();
+          }
+        }
+      }
+    }
+
     logger.info('   📋 Updating files from template...');
 
     // 기존 프로젝트명 디렉토리들 삭제 (깨끗하게 다시 복사하기 위해)
@@ -286,6 +305,14 @@ class SyncMonorepoService {
     // 파일 처리 (디렉토리 이름은 이미 변환됨)
     final stats = await _processFiles(targetDir, config, patterns);
     convertedFiles = stats['converted'] as int;
+
+    // passwords.yaml 파일 복원
+    for (final entry in passwordsBackup.entries) {
+      final passwordsPath = entry.key;
+      final passwordsContent = entry.value;
+      final passwordsFile = File(passwordsPath);
+      await passwordsFile.writeAsBytes(passwordsContent);
+    }
 
     logger.info('   ✅ serverpod_backend brick synced:');
     logger.info('      • $convertedFiles files converted');
@@ -1198,7 +1225,8 @@ class SyncMonorepoService {
         content.contains('{{#has_serverpod}}') ||
         content.contains('{{#has_graphql}}') ||
         content.contains('{{#has_supabase}}') ||
-        content.contains('{{#has_firebase}}')) {
+        content.contains('{{#has_firebase}}') ||
+        content.contains('{{#enable_admin}}')) {
       return content;
     }
 
@@ -1213,6 +1241,12 @@ class SyncMonorepoService {
       'firebase_service': 'has_firebase',
     };
 
+    // console 관련 패키지 (enable_admin 조건)
+    final consolePatterns = {
+      'console_banner_list': 'enable_admin',
+      'console_router': 'enable_admin',
+    };
+
     // shared/dependencies/pubspec.yaml인지 확인
     final isDependenciesPubspec =
         filePath.contains('shared/dependencies/pubspec.yaml') ||
@@ -1220,6 +1254,13 @@ class SyncMonorepoService {
           'shared${path.separator}dependencies${path.separator}pubspec.yaml',
         );
 
+    // package/core/pubspec.yaml인지 확인
+    final isCorePubspec = filePath.contains('package/core/pubspec.yaml') ||
+        filePath.contains(
+          'package${path.separator}core${path.separator}pubspec.yaml',
+        );
+
+    // 서비스 패턴 처리
     for (final entry in servicePatterns.entries) {
       final serviceName = entry.key;
       final conditionalFlag = entry.value;
@@ -1240,6 +1281,27 @@ class SyncMonorepoService {
       } else {
         // feature/*/pubspec.yaml: 서비스 의존성 라인 완전히 제거
         result = result.replaceAll(pattern, '');
+      }
+    }
+
+    // console 패턴 처리 (package/core/pubspec.yaml에서만)
+    if (isCorePubspec) {
+      for (final entry in consolePatterns.entries) {
+        final packageName = entry.key;
+        final conditionalFlag = entry.value;
+
+        // 패턴: "  package_name: ^0.1.0" (앞에 공백, 줄 끝까지)
+        final pattern = RegExp(
+          '^(\\s+)$packageName:\\s*\\^[\\d.]+\\s*\$',
+          multiLine: true,
+        );
+
+        // 조건부 템플릿으로 변환
+        result = result.replaceAllMapped(pattern, (match) {
+          final indent = match.group(1)!;
+          final dependencyLine = match.group(0)!.trim();
+          return '$indent{{#$conditionalFlag}}$dependencyLine{{/$conditionalFlag}}';
+        });
       }
     }
 
@@ -2269,19 +2331,17 @@ class SyncMonorepoService {
 
       // ignore 목록이 끝나는 시점 감지 (dependsOn:)
       if (inBuildSelectIgnore && trimmed == 'dependsOn:') {
-        // 마지막 ignore 항목에 {{#has_serverpod}} 태그 추가
-        if (lastIgnoreLineIndex >= 0) {
-          result[lastIgnoreLineIndex] =
-              '${result[lastIgnoreLineIndex]}{{#has_serverpod}}';
-        }
-        // dependsOn: 직전에 조건부 항목 추가
-        final itemIndent = '$ignoreIndent      ';
+        // dependsOn: 직전에 조건부 항목 추가 (각 조건부 태그를 별도 줄로)
+        // ignoreIndent는 "ignore:" 앞의 공백이므로, 리스트 항목을 위해 2칸 더 들여씀
+        final itemIndent = '$ignoreIndent  ';
         result
-          ..add(
-            '$itemIndent- "serverpod_service"{{/has_serverpod}}{{#has_openapi}}',
-          )
+          ..add('$itemIndent{{#has_serverpod}}')
+          ..add('$itemIndent- "serverpod_service"')
+          ..add('$itemIndent{{/has_serverpod}}')
+          ..add('$itemIndent{{#has_openapi}}')
           ..add('$itemIndent- "openapi_service"')
-          ..add('$itemIndent- "openapi"{{/has_openapi}}');
+          ..add('$itemIndent- "openapi"')
+          ..add('$itemIndent{{/has_openapi}}');
         inBuildSelectIgnore = false;
       }
 
