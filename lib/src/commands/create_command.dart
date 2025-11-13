@@ -31,10 +31,6 @@ class CreateCommand extends Command<int> {
         help: 'Project name (required in non-interactive mode)',
       )
       ..addOption(
-        'project-shortcut',
-        help: 'Project shortcut (2-3 characters)',
-      )
-      ..addOption(
         'description',
         abbr: 'd',
         help: 'Project description',
@@ -245,17 +241,6 @@ class CreateCommand extends Command<int> {
       }
     }
     vars['project_name'] = projectName;
-
-    // Project shortcut
-    final defaultShortcut = projectName.substring(0, 2).toLowerCase();
-    var projectShortcut = argResults!['project-shortcut'] as String?;
-    if (interactive && (projectShortcut == null || projectShortcut.isEmpty)) {
-      projectShortcut = _logger.prompt(
-        'Project shortcut (2-3 characters):',
-        defaultValue: defaultShortcut,
-      );
-    }
-    vars['project_shortcut'] = projectShortcut ?? defaultShortcut;
 
     // Description
     String? description = argResults!['description'] as String?;

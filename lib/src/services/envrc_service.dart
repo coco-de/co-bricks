@@ -9,7 +9,6 @@ class ProjectConfig {
     required this.orgName,
     required this.orgTld,
     this.projectNameSnake,
-    this.projectShortcut,
     this.githubOrg,
     this.githubRepo,
     this.randomProjectId,
@@ -22,7 +21,6 @@ class ProjectConfig {
   final String? projectNameSnake;
   final String orgName;
   final String orgTld;
-  final String? projectShortcut;
   final String? githubOrg;
   final String? githubRepo;
   final String? randomProjectId;
@@ -89,7 +87,6 @@ class EnvrcService {
     String? projectNameSnake;
     String? orgName;
     String? orgTld;
-    String? projectShortcut;
     String? githubOrg;
     String? githubRepo;
     String? randomProjectId;
@@ -128,9 +125,6 @@ class EnvrcService {
           case 'ORG_TLD':
           case 'TLD':
             orgTld = value;
-            break;
-          case 'PROJECT_SHORTCUT':
-            projectShortcut = value;
             break;
           case 'GITHUB_ORG':
             githubOrg = value;
@@ -180,7 +174,6 @@ class EnvrcService {
       projectNameSnake: projectNameSnake,
       orgName: orgName,
       orgTld: orgTld,
-      projectShortcut: projectShortcut,
       githubOrg: githubOrg,
       githubRepo: githubRepo,
       randomProjectId: randomProjectId,
