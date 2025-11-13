@@ -474,6 +474,18 @@ class SyncAppService {
       iconPaths.add(macosFirebasePath);
     }
 
+    // Firebase 설정 파일들 (루트 레벨 - flavor 없음)
+    final rootFirebaseFiles = [
+      'android/app/google-services.json',
+      'ios/Runner/GoogleService-Info.plist',
+    ];
+    for (final firebaseFile in rootFirebaseFiles) {
+      final firebasePath = path.join(brickDir.path, firebaseFile);
+      if (File(firebasePath).existsSync()) {
+        iconPaths.add(firebasePath);
+      }
+    }
+
     if (iconPaths.isEmpty) {
       return null;
     }
