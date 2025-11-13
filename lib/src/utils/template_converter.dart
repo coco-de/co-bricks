@@ -349,18 +349,23 @@ class TemplateConverter {
         );
       }
 
-      // 경로 패턴: app/ 하위는 snakeCase 사용 (suffix 패턴 다음, 일반 패턴보다 먼저)
-      // app/프로젝트명/ 형태의 경로
+      // 경로 패턴: 슬래시(/)가 양쪽에 있으면 무조건 snakeCase 사용
+      // (suffix 패턴 다음, 점/하이픈 패턴보다 먼저 - 가장 구체적)
       patterns.addAll([
-        // app/blueprint/ -> app/{{project_name.snakeCase()}}/
+        // /projectName/ 패턴 (양쪽에 슬래시)
         ReplacementPattern(
-          RegExp('app/${_escapeRegex(baseSnake)}/'),
-          'app/{{project_name.snakeCase()}}/',
+          RegExp('/${_escapeRegex(baseSnake)}/'),
+          '/{{project_name.snakeCase()}}/',
         ),
-        // app/blueprint (마지막 슬래시 없음) -> app/{{project_name.snakeCase()}}
+        // /projectName (왼쪽에만 슬래시, 오른쪽은 단어 경계)
         ReplacementPattern(
-          RegExp('app/${_escapeRegex(baseSnake)}\\b'),
-          'app/{{project_name.snakeCase()}}',
+          RegExp('/${_escapeRegex(baseSnake)}\\b'),
+          '/{{project_name.snakeCase()}}',
+        ),
+        // projectName/ 패턴 (오른쪽에만 슬래시, 왼쪽은 단어 경계)
+        ReplacementPattern(
+          RegExp('\\b${_escapeRegex(baseSnake)}/'),
+          '{{project_name.snakeCase()}}/',
         ),
       ]);
 
