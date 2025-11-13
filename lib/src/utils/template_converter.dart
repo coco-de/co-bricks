@@ -804,6 +804,55 @@ class TemplateConverter {
           final projectDot = projectName.replaceAll('_', '.');
 
           for (final randomId in randomProjectIds) {
+            // 단순 하이픈 패턴: projectName-randomId (Firebase project ID용)
+            // 가장 먼저 매칭되어야 함 (가장 구체적)
+
+            // projectName-{suffix}-randomId 패턴 (console, widgetbook 등)
+            for (final suffix in ['console', 'widgetbook']) {
+              patterns.addAll([
+                ReplacementPattern(
+                  RegExp(
+                    '\\b${_escapeRegex(projectParam)}-$suffix-${_escapeRegex(randomId)}-dev\\b',
+                  ),
+                  '{{project_name.paramCase()}}-$suffix-{{randomprojectid}}-dev',
+                ),
+                ReplacementPattern(
+                  RegExp(
+                    '\\b${_escapeRegex(projectParam)}-$suffix-${_escapeRegex(randomId)}-stg\\b',
+                  ),
+                  '{{project_name.paramCase()}}-$suffix-{{randomprojectid}}-stg',
+                ),
+                ReplacementPattern(
+                  RegExp(
+                    '\\b${_escapeRegex(projectParam)}-$suffix-${_escapeRegex(randomId)}\\b',
+                  ),
+                  '{{project_name.paramCase()}}-$suffix-{{randomprojectid}}',
+                ),
+              ]);
+            }
+
+            // projectName-randomId 패턴 (기본)
+            patterns.addAll([
+              ReplacementPattern(
+                RegExp(
+                  '\\b${_escapeRegex(projectParam)}-${_escapeRegex(randomId)}-dev\\b',
+                ),
+                '{{project_name.paramCase()}}-{{randomprojectid}}-dev',
+              ),
+              ReplacementPattern(
+                RegExp(
+                  '\\b${_escapeRegex(projectParam)}-${_escapeRegex(randomId)}-stg\\b',
+                ),
+                '{{project_name.paramCase()}}-{{randomprojectid}}-stg',
+              ),
+              ReplacementPattern(
+                RegExp(
+                  '\\b${_escapeRegex(projectParam)}-${_escapeRegex(randomId)}\\b',
+                ),
+                '{{project_name.paramCase()}}-{{randomprojectid}}',
+              ),
+            ]);
+
             // 순수 점(.) 패턴 (모두 dotCase) - 가장 먼저! 더 구체적
             patterns.addAll([
               ReplacementPattern(
