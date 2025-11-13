@@ -365,49 +365,54 @@ class TemplateConverter {
       ]);
 
       // 하이픈(-) 패턴: paramCase 사용
+      // 주의: 밑줄(_)로 둘러싸이지 않은 경우만 매칭 (snakeCase와 구분)
       patterns.addAll([
         ReplacementPattern(
           RegExp('-${_escapeRegex(baseParam)}-'),
           '-{{project_name.paramCase()}}-',
         ),
         ReplacementPattern(
-          RegExp('\\b${_escapeRegex(baseParam)}-'),
+          RegExp('(?<!_)\\b${_escapeRegex(baseParam)}-'),
           '{{project_name.paramCase()}}-',
         ),
         ReplacementPattern(
-          RegExp('-${_escapeRegex(baseParam)}\\b'),
+          RegExp('-${_escapeRegex(baseParam)}\\b(?!_)'),
           '-{{project_name.paramCase()}}',
         ),
+        // 밑줄 전후가 없는 경우만 매칭 (snakeCase 보호)
         ReplacementPattern(
-          RegExp('\\b${_escapeRegex(baseParam)}\\b'),
+          RegExp('(?<!_)\\b${_escapeRegex(baseParam)}\\b(?!_)'),
           '{{project_name.paramCase()}}',
         ),
       ]);
 
       // 점(.) 패턴: dotCase 사용
+      // 주의: 밑줄(_)로 둘러싸이지 않은 경우만 매칭 (snakeCase와 구분)
       patterns.addAll([
         ReplacementPattern(
           RegExp('\\.${_escapeRegex(baseDot)}\\.'),
           '.{{project_name.dotCase()}}.',
         ),
         ReplacementPattern(
-          RegExp('\\b${_escapeRegex(baseDot)}\\.'),
+          RegExp('(?<!_)\\b${_escapeRegex(baseDot)}\\.'),
           '{{project_name.dotCase()}}.',
         ),
         ReplacementPattern(
-          RegExp('\\.${_escapeRegex(baseDot)}\\b'),
+          RegExp('\\.${_escapeRegex(baseDot)}\\b(?!_)'),
           '.{{project_name.dotCase()}}',
         ),
+        // 밑줄 전후가 없는 경우만 매칭 (snakeCase 보호)
         ReplacementPattern(
-          RegExp('\\b${_escapeRegex(baseDot)}\\b'),
+          RegExp('(?<!_)\\b${_escapeRegex(baseDot)}\\b(?!_)'),
           '{{project_name.dotCase()}}',
         ),
       ]);
 
       // Title case 패턴
+      // 주의: 밑줄(_)로 둘러싸이지 않은 경우만 매칭 (snakeCase와 구분)
       patterns.addAll([
         ReplacementPattern(
-          RegExp('\\b${_escapeRegex(baseTitle)}\\b'),
+          RegExp('(?<!_)\\b${_escapeRegex(baseTitle)}\\b(?!_)'),
           '{{project_name.titleCase()}}',
         ),
         ReplacementPattern(
