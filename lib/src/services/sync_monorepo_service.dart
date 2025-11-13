@@ -951,6 +951,13 @@ class SyncMonorepoService {
       if (entity is File) {
         final originalFileName = path.basename(entity.path);
 
+        // Flutter LLDB 관련 파일 제외 (widgetbook의 ephemeral 디렉토리)
+        if (entity.path.contains('ios/Flutter/ephemeral') &&
+            (originalFileName == 'flutter_lldb_helper.py' ||
+             originalFileName == 'flutter_lldbinit')) {
+          continue;
+        }
+
         // 이미 조건부 템플릿이 포함된 파일명인지 확인
         final hasConditionalTemplate =
             originalFileName.contains('{{#') &&
