@@ -152,8 +152,8 @@ class TemplateConverter {
     // github.com/coco-de/good-teacher.git 패턴
     // 프로젝트명이 포함된 GitHub URL 패턴 처리
     for (final projectName in projectNames) {
-      final projectParam = projectName.replaceAll('_', '-');  // good-teacher
-      final projectSnake = projectName;  // good_teacher
+      final projectParam = projectName.replaceAll('_', '-'); // good-teacher
+      final projectSnake = projectName; // good_teacher
 
       // param-case 버전 (good-teacher)
       // https:// 포함 버전
@@ -239,7 +239,9 @@ class TemplateConverter {
       // 이미 프로젝트명이 변환된 경우 처리
       // github.com/coco-de/{{project_name...}} → github.com/{{github_org}}/{{project_name...}}
       ReplacementPattern(
-        RegExp(r'github\.com/' + _escapeRegex(githubOrg) + r'/\{\{project_name\.'),
+        RegExp(
+          r'github\.com/' + _escapeRegex(githubOrg) + r'/\{\{project_name\.',
+        ),
         'github.com/{{github_org}}/{{project_name.',
       ),
 
@@ -351,15 +353,16 @@ class TemplateConverter {
 
       // 경로 패턴: 슬래시(/)가 양쪽에 있으면 무조건 snakeCase 사용
       // (suffix 패턴 다음, 점/하이픈 패턴보다 먼저 - 가장 구체적)
+      // URL을 제외하기 위해 (?<!/) negative lookbehind 추가 (URL은 // 형태)
       patterns.addAll([
-        // /projectName/ 패턴 (양쪽에 슬래시)
+        // /projectName/ 패턴 (양쪽에 슬래시, URL의 // 제외)
         ReplacementPattern(
-          RegExp('/${_escapeRegex(baseSnake)}/'),
+          RegExp('(?<!/)/${_escapeRegex(baseSnake)}/'),
           '/{{project_name.snakeCase()}}/',
         ),
-        // /projectName (왼쪽에만 슬래시, 오른쪽은 단어 경계)
+        // /projectName (왼쪽에만 슬래시, 오른쪽은 단어 경계, URL의 // 제외)
         ReplacementPattern(
-          RegExp('/${_escapeRegex(baseSnake)}\\b'),
+          RegExp('(?<!/)/${_escapeRegex(baseSnake)}\\b'),
           '/{{project_name.snakeCase()}}',
         ),
         // projectName/ 패턴 (오른쪽에만 슬래시, 왼쪽은 단어 경계)
@@ -370,8 +373,16 @@ class TemplateConverter {
       ]);
 
       // 하이픈(-) 패턴: paramCase 사용 (점 패턴보다 먼저 - 더 일반적)
-      // 주의: 밑줄(_)과 슬래시(/)로 둘러싸이지 않은 경우만 매칭
+      // URL 컨텍스트를 먼저 처리 (https://, http://, s3:// 등)
       patterns.addAll([
+        // URL에서 project-name- 패턴 (예: https://blueprint-private-storage)
+        // (?<=://) - positive lookbehind for ://
+        // (?:[^/]*\\.)? - optional subdomain with dot
+        ReplacementPattern(
+          RegExp('(?<=://)(?:[^/]*\\.)?${_escapeRegex(baseParam)}-'),
+          '{{project_name.paramCase()}}-',
+        ),
+        // 일반 하이픈 패턴들
         ReplacementPattern(
           RegExp('-${_escapeRegex(baseParam)}-'),
           '-{{project_name.paramCase()}}-',
@@ -386,7 +397,9 @@ class TemplateConverter {
         ),
         // 단독 패턴: 밑줄, 점, 슬래시가 전후에 없는 경우 (기본값)
         ReplacementPattern(
-          RegExp('(?<!_)(?<!\\.)(?<!/)\\b${_escapeRegex(baseParam)}\\b(?!_)(?!\\.)(?!/)'),
+          RegExp(
+            '(?<!_)(?<!\\.)(?<!/)\\b${_escapeRegex(baseParam)}\\b(?!_)(?!\\.)(?!/)',
+          ),
           '{{project_name.paramCase()}}',
         ),
       ]);
@@ -459,13 +472,18 @@ class TemplateConverter {
 
       // 기본 snake_case 패턴 (마지막에 처리)
       // Serverpod 관련 클래스명을 제외하기 위한 negative lookahead 추가
+      // 하이픈(-)이 뒤따르는 경우도 제외 (paramCase 패턴이 처리해야 함)
       patterns.addAll([
         ReplacementPattern(
-          RegExp('(?<!Servo)\\b${_escapeRegex(baseSnake)}\\b(?!Service|Client|pod)'),
+          RegExp(
+            '(?<!Servo)\\b${_escapeRegex(baseSnake)}\\b(?!Service|Client|pod|-)',
+          ),
           '{{project_name.snakeCase()}}',
         ),
         ReplacementPattern(
-          RegExp('(?<!Servo)\\b${_escapeRegex(baseSnake.replaceAll("_", ""))}\\b(?!Service|Client|pod)'),
+          RegExp(
+            '(?<!Servo)\\b${_escapeRegex(baseSnake.replaceAll("_", ""))}\\b(?!Service|Client|pod|-)',
+          ),
           '{{project_name.snakeCase()}}',
         ),
       ]);
@@ -615,7 +633,7 @@ class TemplateConverter {
         patterns.add(
           ReplacementPattern(
             RegExp('_Fake${_escapeRegex(basePascal)}$suffix' + r'(_\d+)\b'),
-            '_Fake{{project_name.pascalCase()}}$suffix' + r'$1',
+            '_FakeApp$suffix' + r'$1',
           ),
         );
       }
@@ -676,13 +694,21 @@ class TemplateConverter {
         patterns.add(
           ReplacementPattern(
             RegExp('\\b${_escapeRegex(basePascal)}$suffix\\b'),
-            '{{project_name.pascalCase()}}$suffix',
+            'App$suffix',
           ),
         );
       }
 
       // _add, _remove 같은 underscore prefix 패턴도 처리
-      for (final prefix in ['_add', '_remove', '_get', '_set', '_create', '_delete', '_update']) {
+      for (final prefix in [
+        '_add',
+        '_remove',
+        '_get',
+        '_set',
+        '_create',
+        '_delete',
+        '_update',
+      ]) {
         // prefix + PascalCase + CamelCaseContinuation (e.g., _addBlueprintUsersToChat)
         // This pattern captures any camelCase continuation after the project name
         patterns.add(
@@ -705,7 +731,7 @@ class TemplateConverter {
       patterns.add(
         ReplacementPattern(
           RegExp('\\b${_escapeRegex(basePascal)}\\b'),
-          '{{project_name.pascalCase()}}',
+          'App',
         ),
       );
 
@@ -1311,7 +1337,7 @@ class TemplateConverter {
       'DateTime',
       'Duration',
       // Serverpod framework classes and keywords
-      'serverpod',  // import alias
+      'serverpod', // import alias
       'ServerpodService',
       'ServerpodClient',
       'ServerpodClientException',
