@@ -694,7 +694,7 @@ class TemplateConverter {
         patterns.add(
           ReplacementPattern(
             RegExp('\\b${_escapeRegex(basePascal)}$suffix\\b'),
-            'App$suffix',
+            '{{project_name.pascalCase()}}$suffix',
           ),
         );
       }
@@ -731,7 +731,7 @@ class TemplateConverter {
       patterns.add(
         ReplacementPattern(
           RegExp('\\b${_escapeRegex(basePascal)}\\b'),
-          'App',
+          '{{project_name.pascalCase()}}',
         ),
       );
 
@@ -1354,9 +1354,41 @@ class TemplateConverter {
       );
     }
 
-    // 패턴 적용
+    // 패턴 적용 (이미 변환된 템플릿 변수 보호)
     for (final pattern in patterns) {
-      result = result.replaceAll(pattern.pattern, pattern.replacement);
+      // 임시로 이미 변환된 템플릿 변수를 플레이스홀더로 교체
+      final templatePlaceholders = <String, String>{};
+      var tempResult = result;
+
+      // {{...}} 형태의 템플릿 변수를 찾아서 보호
+      final templatePattern = RegExp(r'\{\{[^}]+\}\}');
+      final matches = templatePattern.allMatches(tempResult).toList();
+
+      for (var i = 0; i < matches.length; i++) {
+        final match = matches[i];
+        final placeholder = '___TEMPLATE_VAR_${i}___';
+        final originalValue = match.group(0)!;
+        templatePlaceholders[placeholder] = originalValue;
+        tempResult = tempResult.replaceFirst(originalValue, placeholder);
+      }
+
+      // 패턴 적용 (콜백 함수 사용하여 캡처 그룹 처리)
+      tempResult = tempResult.replaceAllMapped(pattern.pattern, (match) {
+        var replacement = pattern.replacement;
+        // 캡처 그룹을 실제 값으로 치환
+        for (var i = 0; i <= match.groupCount; i++) {
+          final groupValue = match.group(i) ?? '';
+          replacement = replacement.replaceAll('\$$i', groupValue);
+        }
+        return replacement;
+      });
+
+      // 보호된 템플릿 변수 복원
+      for (final entry in templatePlaceholders.entries) {
+        tempResult = tempResult.replaceAll(entry.key, entry.value);
+      }
+
+      result = tempResult;
     }
 
     // _podService를 _serverpodService로 변환
