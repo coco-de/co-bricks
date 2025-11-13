@@ -679,30 +679,36 @@ class SyncMonorepoService {
 
           // 정확한 패키지 이름 매칭 (예: "serverpod_service:")
           if (trimmed.startsWith('$serviceName:')) {
+            // 이미 이 서비스를 추가했으면 스킵 (중복 방지)
+            if (addedServices.contains(serviceName)) {
+              wasConverted = true; // 이 라인은 건너뛰기
+              logger.detail(
+                '   ⏭️  Skipped duplicate: $serviceName',
+              );
+              break;
+            }
+
             // 이미 조건부인지 확인
             if (!line.contains('{{#')) {
-              // 들여쓰기 유지하면서 조건부로 변환
+              // 들여쓰기 유지
               final indent = line.substring(0, line.indexOf(serviceName));
               lastServiceIndent = indent;
-              result.add(
-                '$indent{{#$conditionalFlag}}$trimmed{{/$conditionalFlag}}',
-              );
-              addedServices.add(serviceName);
-              wasConverted = true;
-              logger.detail(
-                '   🔄 Converted to conditional: $serviceName',
-              );
 
-              // 변환된 서비스 바로 다음에 누락된 다른 서비스들 추가
-              for (final missingEntry in servicePatterns.entries) {
-                final missingService = missingEntry.key;
-                final missingFlag = missingEntry.value;
+              // 첫 번째 서비스를 만났을 때만 모든 서비스를 추가
+              if (addedServices.isEmpty) {
+                logger.detail(
+                  '   🎯 First service found, adding all services in order...',
+                );
 
-                if (!addedServices.contains(missingService)) {
+                // 모든 서비스를 정해진 순서로 추가
+                for (final svcEntry in servicePatterns.entries) {
+                  final svcName = svcEntry.key;
+                  final svcFlag = svcEntry.value;
+
                   // 백업된 조건부 라인에서 찾기
                   String? existingLine;
                   for (final backupLine in existingConditionalLines) {
-                    if (backupLine.contains(missingService)) {
+                    if (backupLine.contains(svcName)) {
                       existingLine = backupLine;
                       break;
                     }
@@ -712,22 +718,23 @@ class SyncMonorepoService {
                     // 백업된 라인 사용
                     result.add('$indent$existingLine');
                     logger.detail(
-                      '   ✅ Restored from backup: $existingLine',
+                      '   ✅ Restored from backup: $svcName',
                     );
                   } else {
                     // 새로 생성 (기본 버전 0.1.0)
                     final conditionalLine =
-                        '{{#$missingFlag}}$missingService: ^0.1.0{{/$missingFlag}}';
+                        '{{#$svcFlag}}$svcName: ^0.1.0{{/$svcFlag}}';
                     result.add('$indent$conditionalLine');
                     logger.detail(
-                      '   ✨ Added missing service: $conditionalLine',
+                      '   ✨ Added service: $svcName',
                     );
                   }
 
-                  addedServices.add(missingService);
+                  addedServices.add(svcName);
                 }
               }
 
+              wasConverted = true;
               break;
             }
           }
