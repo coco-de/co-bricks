@@ -412,6 +412,40 @@ class SyncAppService {
       }
     }
 
+    // Web 아이콘 파일들
+    final webIconFiles = [
+      'web/favicon.png',
+      'web/icons/Icon-192.png',
+      'web/icons/Icon-512.png',
+      'web/icons/Icon-maskable-192.png',
+      'web/icons/Icon-maskable-512.png',
+    ];
+    for (final iconFile in webIconFiles) {
+      final iconPath = path.join(brickDir.path, iconFile);
+      if (File(iconPath).existsSync()) {
+        iconPaths.add(iconPath);
+      }
+    }
+
+    // Web splash 이미지 디렉토리
+    final webSplashPath = path.join(brickDir.path, 'web/splash/img');
+    if (Directory(webSplashPath).existsSync()) {
+      iconPaths.add(webSplashPath);
+    }
+
+    // Snap GUI 아이콘
+    final snapIconPath = path.join(brickDir.path, 'snap/gui/app_icon.png');
+    if (File(snapIconPath).existsSync()) {
+      iconPaths.add(snapIconPath);
+    }
+
+    // Windows 아이콘
+    final windowsIconPath =
+        path.join(brickDir.path, 'windows/runner/resources/app_icon.ico');
+    if (File(windowsIconPath).existsSync()) {
+      iconPaths.add(windowsIconPath);
+    }
+
     if (iconPaths.isEmpty) {
       return null;
     }
