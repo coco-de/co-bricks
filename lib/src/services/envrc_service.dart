@@ -31,7 +31,21 @@ class ProjectConfig {
   final String? itcTeamId;
 
   /// 프로젝트명 리스트 (.envrc에서 파싱한 값만 사용)
-  /// projectNameSnake가 있으면 추가하여 camelCase 변환에 사용
+  ///
+  /// 전략:
+  /// 1. PROJECT_NAME_SNAKE가 있으면: 두 형태 모두 사용
+  ///    - 예: PROJECT_NAME="goodteacher" + PROJECT_NAME_SNAKE="good_teacher"
+  ///    - 결과: ["goodteacher", "good_teacher"] - 두 케이스 모두 커버
+  ///
+  /// 2. PROJECT_NAME_SNAKE가 없으면: PROJECT_NAME만 사용
+  ///    - 예: PROJECT_NAME="blueprint" (단일 단어)
+  ///    - 결과: ["blueprint"] - 단일 단어 케이스
+  ///
+  /// 이를 통해:
+  /// - good_teacher → goodTeacher → goodTeacherService (복합 단어)
+  /// - goodteacher → goodteacher → goodteacherService (단일 단어)
+  /// - blueprint → blueprint → blueprintService (단일 단어)
+  /// 모두 커버 가능
   List<String> get projectNames => [
         projectName,
         if (projectNameSnake != null && projectNameSnake != projectName)
