@@ -591,6 +591,17 @@ class TemplateConverter {
       // Mason 케이스 변환 함수에 맞춘 패턴 생성
       // 패턴 순서: 더 구체적인 패턴부터 일반적인 패턴 순서로
 
+      // 0. Title case 주석 패턴 (가장 먼저 처리 - PascalCase보다 우선)
+      // 주석 안에서 사용되는 경우를 먼저 매칭
+      // 주석 컨텍스트에서는 titleCase를 유지
+      // 특별히 "for ProjectName." 패턴을 먼저 매칭 (문서 주석에서 자주 사용)
+      patterns.add(
+        ReplacementPattern(
+          RegExp('for ${_escapeRegex(baseTitle)}\\.'),
+          'for {{project_name.titleCase()}}.',
+        ),
+      );
+
       // 1. Pascal case (HelloWorld) - suffix가 있는 패턴 먼저 (더 구체적인 순서)
       // Mock 클래스 패턴 (_FakeGoodTeacherService_0)
       for (final suffix in [
