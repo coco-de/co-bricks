@@ -364,29 +364,7 @@ class TemplateConverter {
         ),
       ]);
 
-      // 하이픈(-) 패턴: paramCase 사용
-      // 주의: 밑줄(_)로 둘러싸이지 않은 경우만 매칭 (snakeCase와 구분)
-      patterns.addAll([
-        ReplacementPattern(
-          RegExp('-${_escapeRegex(baseParam)}-'),
-          '-{{project_name.paramCase()}}-',
-        ),
-        ReplacementPattern(
-          RegExp('(?<!_)\\b${_escapeRegex(baseParam)}-'),
-          '{{project_name.paramCase()}}-',
-        ),
-        ReplacementPattern(
-          RegExp('-${_escapeRegex(baseParam)}\\b(?!_)'),
-          '-{{project_name.paramCase()}}',
-        ),
-        // 밑줄 전후가 없는 경우만 매칭 (snakeCase 보호)
-        ReplacementPattern(
-          RegExp('(?<!_)\\b${_escapeRegex(baseParam)}\\b(?!_)'),
-          '{{project_name.paramCase()}}',
-        ),
-      ]);
-
-      // 점(.) 패턴: dotCase 사용
+      // 점(.) 패턴: dotCase 사용 (paramCase보다 우선 - 더 구체적)
       // 주의: 밑줄(_)로 둘러싸이지 않은 경우만 매칭 (snakeCase와 구분)
       patterns.addAll([
         ReplacementPattern(
@@ -408,11 +386,33 @@ class TemplateConverter {
         ),
       ]);
 
-      // Title case 패턴
-      // 주의: 밑줄(_)로 둘러싸이지 않은 경우만 매칭 (snakeCase와 구분)
+      // 하이픈(-) 패턴: paramCase 사용
+      // 주의: 밑줄(_)과 점(.)으로 둘러싸이지 않은 경우만 매칭 (snakeCase, dotCase와 구분)
       patterns.addAll([
         ReplacementPattern(
-          RegExp('(?<!_)\\b${_escapeRegex(baseTitle)}\\b(?!_)'),
+          RegExp('-${_escapeRegex(baseParam)}-'),
+          '-{{project_name.paramCase()}}-',
+        ),
+        ReplacementPattern(
+          RegExp('(?<!_)\\b${_escapeRegex(baseParam)}-'),
+          '{{project_name.paramCase()}}-',
+        ),
+        ReplacementPattern(
+          RegExp('-${_escapeRegex(baseParam)}\\b(?!_)'),
+          '-{{project_name.paramCase()}}',
+        ),
+        // 밑줄과 점 전후가 없는 경우만 매칭 (snakeCase, dotCase 보호)
+        ReplacementPattern(
+          RegExp('(?<!_)(?<!\\.)\\b${_escapeRegex(baseParam)}\\b(?!_)(?!\\.)'),
+          '{{project_name.paramCase()}}',
+        ),
+      ]);
+
+      // Title case 패턴
+      // 주의: 밑줄(_)과 점(.)으로 둘러싸이지 않은 경우만 매칭 (snakeCase, dotCase와 구분)
+      patterns.addAll([
+        ReplacementPattern(
+          RegExp('(?<!_)(?<!\\.)\\b${_escapeRegex(baseTitle)}\\b(?!_)(?!\\.)'),
           '{{project_name.titleCase()}}',
         ),
         ReplacementPattern(
@@ -804,7 +804,29 @@ class TemplateConverter {
           final projectDot = projectName.replaceAll('_', '.');
 
           for (final randomId in randomProjectIds) {
-            // 혼합 패턴 (점 + 하이픈): im.laputa.good-teacher.iace 형태 (가장 먼저!)
+            // 순수 점(.) 패턴 (모두 dotCase) - 가장 먼저! 더 구체적
+            patterns.addAll([
+              ReplacementPattern(
+                RegExp(
+                  '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.${_escapeRegex(randomId)}\\.dev\\b',
+                ),
+                '{{org_tld}}.{{org_name.dotCase()}}.{{project_name.dotCase()}}.{{randomprojectid}}.dev',
+              ),
+              ReplacementPattern(
+                RegExp(
+                  '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.${_escapeRegex(randomId)}\\.stg\\b',
+                ),
+                '{{org_tld}}.{{org_name.dotCase()}}.{{project_name.dotCase()}}.{{randomprojectid}}.stg',
+              ),
+              ReplacementPattern(
+                RegExp(
+                  '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.${_escapeRegex(randomId)}\\b',
+                ),
+                '{{org_tld}}.{{org_name.dotCase()}}.{{project_name.dotCase()}}.{{randomprojectid}}',
+              ),
+            ]);
+
+            // 혼합 패턴 (점 + 하이픈): im.laputa.good-teacher.iace 형태
             patterns.addAll([
               ReplacementPattern(
                 RegExp(
@@ -847,29 +869,29 @@ class TemplateConverter {
                 '{{project_name.paramCase()}}-{{randomprojectid}}',
               ),
             ]);
-
-            // 순수 점(.) 패턴 (모두 dotCase)
-            patterns.addAll([
-              ReplacementPattern(
-                RegExp(
-                  '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.${_escapeRegex(randomId)}\\.dev\\b',
-                ),
-                '{{org_tld}}.{{org_name.dotCase()}}.{{project_name.dotCase()}}.{{randomprojectid}}.dev',
-              ),
-              ReplacementPattern(
-                RegExp(
-                  '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.${_escapeRegex(randomId)}\\.stg\\b',
-                ),
-                '{{org_tld}}.{{org_name.dotCase()}}.{{project_name.dotCase()}}.{{randomprojectid}}.stg',
-              ),
-              ReplacementPattern(
-                RegExp(
-                  '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.${_escapeRegex(randomId)}\\b',
-                ),
-                '{{org_tld}}.{{org_name.dotCase()}}.{{project_name.dotCase()}}.{{randomprojectid}}',
-              ),
-            ]);
           }
+
+          // 순수 점(.) 패턴 (random ID 없음, 모두 dotCase) - 가장 먼저! 더 구체적
+          patterns.addAll([
+            ReplacementPattern(
+              RegExp(
+                '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.dev\\b',
+              ),
+              '{{org_tld}}.{{org_name.dotCase()}}.{{project_name.dotCase()}}.dev',
+            ),
+            ReplacementPattern(
+              RegExp(
+                '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.stg\\b',
+              ),
+              '{{org_tld}}.{{org_name.dotCase()}}.{{project_name.dotCase()}}.stg',
+            ),
+            ReplacementPattern(
+              RegExp(
+                '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\b',
+              ),
+              '{{org_tld}}.{{org_name.dotCase()}}.{{project_name.dotCase()}}',
+            ),
+          ]);
 
           // 혼합 패턴 (random ID 없음): im.laputa.good-teacher 형태
           patterns.addAll([
@@ -912,28 +934,6 @@ class TemplateConverter {
                 '\\b${_escapeRegex(orgTld)}-${_escapeRegex(orgLower)}-${_escapeRegex(projectParam)}\\b',
               ),
               '{{org_tld}}-{{org_name.lowerCase()}}-{{project_name.paramCase()}}',
-            ),
-          ]);
-
-          // 순수 점(.) 패턴 (random ID 없음, 모두 dotCase)
-          patterns.addAll([
-            ReplacementPattern(
-              RegExp(
-                '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.dev\\b',
-              ),
-              '{{org_tld}}.{{org_name.dotCase()}}.{{project_name.dotCase()}}.dev',
-            ),
-            ReplacementPattern(
-              RegExp(
-                '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\.stg\\b',
-              ),
-              '{{org_tld}}.{{org_name.dotCase()}}.{{project_name.dotCase()}}.stg',
-            ),
-            ReplacementPattern(
-              RegExp(
-                '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.${_escapeRegex(projectDot)}\\b',
-              ),
-              '{{org_tld}}.{{org_name.dotCase()}}.{{project_name.dotCase()}}',
             ),
           ]);
         }
