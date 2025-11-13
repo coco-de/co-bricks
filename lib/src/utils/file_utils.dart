@@ -86,6 +86,60 @@ class FileUtils {
     return false;
   }
 
+  /// 앱 아이콘 디렉토리 제외 여부 확인
+  static bool _shouldExcludeAppIconDirectory(
+    String normalizedPath,
+    String dirName,
+  ) {
+    // iOS Assets.xcassets 제외
+    if (dirName == 'Assets.xcassets' &&
+        normalizedPath.contains('/ios/Runner/')) {
+      return true;
+    }
+
+    // Android mipmap 디렉토리 패턴 (정확한 이름 매칭)
+    final mipmapPatterns = [
+      'mipmap-xxxhdpi',
+      'mipmap-xxhdpi',
+      'mipmap-xhdpi',
+      'mipmap-mdpi',
+      'mipmap-hdpi',
+    ];
+
+    // Android drawable 디렉토리 패턴 (정확한 이름 매칭)
+    final drawablePatterns = [
+      'drawable-xxxhdpi',
+      'drawable-xxhdpi',
+      'drawable-xhdpi',
+      'drawable-mdpi',
+      'drawable-hdpi',
+      'drawable-night-xxxhdpi',
+      'drawable-night-xxhdpi',
+      'drawable-night-xhdpi',
+      'drawable-night-mdpi',
+      'drawable-night-hdpi',
+    ];
+
+    // Android app icon 디렉토리 체크
+    // 경로가 /android/app/src/{flavor}/res/ 바로 아래에 있는지 확인
+    if (normalizedPath.contains('/android/app/src/')) {
+      // development 또는 staging flavor의 res 디렉토리 바로 아래인지 확인
+      final isDevelopmentRes =
+          normalizedPath.endsWith('/development/res/$dirName') ||
+              normalizedPath.contains('/development/res/$dirName/');
+      final isStagingRes = normalizedPath.endsWith('/staging/res/$dirName') ||
+          normalizedPath.contains('/staging/res/$dirName/');
+
+      if ((isDevelopmentRes || isStagingRes) &&
+          (mipmapPatterns.contains(dirName) ||
+              drawablePatterns.contains(dirName))) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   /// 디렉토리 복사 (제외 패턴 지원)
   static Future<void> copyDirectory(
     Directory source,
@@ -125,6 +179,11 @@ class FileUtils {
         if (dirName == 'migrations' &&
             normalizedPath.contains('/backend/') &&
             normalizedPath.contains('_server/')) {
+          continue;
+        }
+
+        // 앱 아이콘 디렉토리 제외
+        if (_shouldExcludeAppIconDirectory(normalizedPath, dirName)) {
           continue;
         }
 
