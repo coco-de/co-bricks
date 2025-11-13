@@ -115,6 +115,9 @@ class SyncAppService {
       path.join(targetBrickPath.path, '__brick__'),
     );
 
+    // 앱 아이콘 디렉토리 백업 (삭제 전)
+    final iconBackupDir = await _backupAppIconDirectories(targetBrickDir);
+
     // 기존 __brick__ 내용 삭제
     if (targetBrickDir.existsSync()) {
       logger.info('   🗑️  Removing old content from ${targetBrickDir.path}');
@@ -126,6 +129,11 @@ class SyncAppService {
 
     logger.info('   📋 Copying from ${path.basename(sourcePath.path)}...');
     await FileUtils.copyDirectory(sourcePath, targetBrickDir, overwrite: true);
+
+    // 백업한 앱 아이콘 복원
+    if (iconBackupDir != null) {
+      await _restoreAppIconDirectories(iconBackupDir, targetBrickDir);
+    }
 
     // Android Kotlin 디렉토리 경로 변환
     logger.info('   🔄 Converting Android Kotlin directory paths...');
@@ -350,6 +358,119 @@ class SyncAppService {
         'widgetbook': 'UI showcase',
       }[syncConfig.appType] ?? syncConfig.appType;
       logger.info('  ✓ bricks/${syncConfig.name}/__brick__/ ($appTypeLabel)');
+    }
+  }
+
+  /// 앱 아이콘 디렉토리 백업
+  Future<Directory?> _backupAppIconDirectories(Directory brickDir) async {
+    if (!brickDir.existsSync()) {
+      return null;
+    }
+
+    // 백업할 아이콘 디렉토리 경로들
+    final iconPaths = <String>[];
+
+    // iOS Assets.xcassets
+    final iosIconPath = path.join(brickDir.path, 'ios/Runner/Assets.xcassets');
+    if (Directory(iosIconPath).existsSync()) {
+      iconPaths.add(iosIconPath);
+    }
+
+    // Android icon directories (main, development, staging flavors)
+    final flavors = ['main', 'development', 'staging'];
+    final densities = [
+      'mipmap-xxxhdpi',
+      'mipmap-xxhdpi',
+      'mipmap-xhdpi',
+      'mipmap-mdpi',
+      'mipmap-hdpi',
+      'mipmap-anydpi-v26', // Adaptive icon
+      'drawable', // Base drawable directory
+      'drawable-xxxhdpi',
+      'drawable-xxhdpi',
+      'drawable-xhdpi',
+      'drawable-mdpi',
+      'drawable-hdpi',
+      'drawable-night', // Night theme base
+      'drawable-night-xxxhdpi',
+      'drawable-night-xxhdpi',
+      'drawable-night-xhdpi',
+      'drawable-night-mdpi',
+      'drawable-night-hdpi',
+      'drawable-v21', // API 21+ version
+      'drawable-night-v21', // Night theme API 21+
+    ];
+
+    for (final flavor in flavors) {
+      for (final density in densities) {
+        final androidIconPath = path.join(
+          brickDir.path,
+          'android/app/src/$flavor/res/$density',
+        );
+        if (Directory(androidIconPath).existsSync()) {
+          iconPaths.add(androidIconPath);
+        }
+      }
+    }
+
+    if (iconPaths.isEmpty) {
+      return null;
+    }
+
+    // 임시 백업 디렉토리 생성
+    final tempDir = Directory.systemTemp.createTempSync('icon_backup_');
+    logger.info('   📦 Backing up ${iconPaths.length} icon directory(ies)...');
+
+    // 아이콘 디렉토리들 백업
+    for (final iconPath in iconPaths) {
+      final iconDir = Directory(iconPath);
+      final relativePath = path.relative(iconPath, from: brickDir.path);
+      final backupPath = path.join(tempDir.path, relativePath);
+      final backupDir = Directory(backupPath);
+
+      backupDir.createSync(recursive: true);
+      await _copyDirectoryContents(iconDir, backupDir);
+    }
+
+    return tempDir;
+  }
+
+  /// 앱 아이콘 디렉토리 복원
+  Future<void> _restoreAppIconDirectories(
+    Directory backupDir,
+    Directory brickDir,
+  ) async {
+    if (!backupDir.existsSync()) {
+      return;
+    }
+
+    logger.info('   📦 Restoring icon directories...');
+
+    // 백업된 내용을 brick 디렉토리로 복원
+    await _copyDirectoryContents(backupDir, brickDir);
+
+    // 백업 디렉토리 삭제
+    await backupDir.delete(recursive: true);
+  }
+
+  /// 디렉토리 내용 복사 (디렉토리 자체가 아닌 내용만)
+  Future<void> _copyDirectoryContents(
+    Directory source,
+    Directory target,
+  ) async {
+    await for (final entity in source.list(recursive: false)) {
+      if (entity is File) {
+        final targetFile = File(
+          path.join(target.path, path.basename(entity.path)),
+        );
+        await entity.copy(targetFile.path);
+      } else if (entity is Directory) {
+        final targetSubDir = Directory(
+          path.join(target.path, path.basename(entity.path)),
+        );
+        targetSubDir.createSync(recursive: true);
+        await _copyDirectoryContents(entity, targetSubDir);
+      }
     }
   }
 }

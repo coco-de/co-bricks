@@ -104,33 +104,40 @@ class FileUtils {
       'mipmap-xhdpi',
       'mipmap-mdpi',
       'mipmap-hdpi',
+      'mipmap-anydpi-v26', // Adaptive icon
     ];
 
     // Android drawable 디렉토리 패턴 (정확한 이름 매칭)
     final drawablePatterns = [
+      'drawable', // Base drawable directory
       'drawable-xxxhdpi',
       'drawable-xxhdpi',
       'drawable-xhdpi',
       'drawable-mdpi',
       'drawable-hdpi',
+      'drawable-night', // Night theme base
       'drawable-night-xxxhdpi',
       'drawable-night-xxhdpi',
       'drawable-night-xhdpi',
       'drawable-night-mdpi',
       'drawable-night-hdpi',
+      'drawable-v21', // API 21+ version
+      'drawable-night-v21', // Night theme API 21+
     ];
 
     // Android app icon 디렉토리 체크
     // 경로가 /android/app/src/{flavor}/res/ 바로 아래에 있는지 확인
     if (normalizedPath.contains('/android/app/src/')) {
-      // development 또는 staging flavor의 res 디렉토리 바로 아래인지 확인
+      // main, development, staging flavor의 res 디렉토리 바로 아래인지 확인
+      final isMainRes = normalizedPath.endsWith('/main/res/$dirName') ||
+          normalizedPath.contains('/main/res/$dirName/');
       final isDevelopmentRes =
           normalizedPath.endsWith('/development/res/$dirName') ||
               normalizedPath.contains('/development/res/$dirName/');
       final isStagingRes = normalizedPath.endsWith('/staging/res/$dirName') ||
           normalizedPath.contains('/staging/res/$dirName/');
 
-      if ((isDevelopmentRes || isStagingRes) &&
+      if ((isMainRes || isDevelopmentRes || isStagingRes) &&
           (mipmapPatterns.contains(dirName) ||
               drawablePatterns.contains(dirName))) {
         return true;
