@@ -1092,7 +1092,24 @@ class TemplateConverter {
     final patterns = <ReplacementPattern>[];
 
     for (final projectName in projectNames) {
+      final projectParam = projectName.replaceAll('_', '-'); // good-teacher
+
+      // URL scheme은 주로 paramCase(하이픈)를 사용하므로 paramCase 우선
       patterns.addAll([
+        // paramCase 버전 (devgood-teacher)
+        ReplacementPattern(
+          RegExp('\\bdev${_escapeRegex(projectParam)}\\b'),
+          'dev{{project_name.paramCase()}}',
+        ),
+        ReplacementPattern(
+          RegExp('\\bstg${_escapeRegex(projectParam)}\\b'),
+          'stg{{project_name.paramCase()}}',
+        ),
+        ReplacementPattern(
+          RegExp('\\bprod${_escapeRegex(projectParam)}\\b'),
+          'prod{{project_name.paramCase()}}',
+        ),
+        // snakeCase 버전도 지원 (devgood_teacher)
         ReplacementPattern(
           RegExp('\\bdev${_escapeRegex(projectName)}\\b'),
           'dev{{project_name.snakeCase()}}',
