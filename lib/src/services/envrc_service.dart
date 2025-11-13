@@ -8,6 +8,7 @@ class ProjectConfig {
     required this.projectName,
     required this.orgName,
     required this.orgTld,
+    this.projectNameSnake,
     this.projectShortcut,
     this.githubOrg,
     this.githubRepo,
@@ -18,6 +19,7 @@ class ProjectConfig {
   });
 
   final String projectName;
+  final String? projectNameSnake;
   final String orgName;
   final String orgTld;
   final String? projectShortcut;
@@ -29,7 +31,12 @@ class ProjectConfig {
   final String? itcTeamId;
 
   /// 프로젝트명 리스트 (.envrc에서 파싱한 값만 사용)
-  List<String> get projectNames => [projectName];
+  /// projectNameSnake가 있으면 추가하여 camelCase 변환에 사용
+  List<String> get projectNames => [
+        projectName,
+        if (projectNameSnake != null && projectNameSnake != projectName)
+          projectNameSnake!,
+      ];
 }
 
 /// .envrc 파일 파싱 서비스
@@ -65,6 +72,7 @@ class EnvrcService {
     final lines = content.split('\n');
 
     String? projectName;
+    String? projectNameSnake;
     String? orgName;
     String? orgTld;
     String? projectShortcut;
@@ -96,6 +104,9 @@ class EnvrcService {
         switch (key) {
           case 'PROJECT_NAME':
             projectName = value;
+            break;
+          case 'PROJECT_NAME_SNAKE':
+            projectNameSnake = value;
             break;
           case 'ORG_NAME':
             orgName = value;
@@ -152,6 +163,7 @@ class EnvrcService {
 
     return ProjectConfig(
       projectName: projectName,
+      projectNameSnake: projectNameSnake,
       orgName: orgName,
       orgTld: orgTld,
       projectShortcut: projectShortcut,
