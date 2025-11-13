@@ -446,6 +446,34 @@ class SyncAppService {
       iconPaths.add(windowsIconPath);
     }
 
+    // Firebase 설정 파일들 (flavor별)
+    for (final flavor in ['main', 'development', 'staging', 'production']) {
+      // Android google-services.json
+      final androidFirebasePath = path.join(
+        brickDir.path,
+        'android/app/src/$flavor/google-services.json',
+      );
+      if (File(androidFirebasePath).existsSync()) {
+        iconPaths.add(androidFirebasePath);
+      }
+
+      // iOS GoogleService-Info.plist
+      final iosFirebasePath = path.join(
+        brickDir.path,
+        'ios/Runner/$flavor/GoogleService-Info.plist',
+      );
+      if (File(iosFirebasePath).existsSync()) {
+        iconPaths.add(iosFirebasePath);
+      }
+    }
+
+    // macOS GoogleService-Info.plist
+    final macosFirebasePath =
+        path.join(brickDir.path, 'macos/Runner/GoogleService-Info.plist');
+    if (File(macosFirebasePath).existsSync()) {
+      iconPaths.add(macosFirebasePath);
+    }
+
     if (iconPaths.isEmpty) {
       return null;
     }
