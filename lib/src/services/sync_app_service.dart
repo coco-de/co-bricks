@@ -389,40 +389,26 @@ class SyncAppService {
       iconPaths.add(macosIconPath);
     }
 
-    // Android icon directories (main, development, staging flavors)
+    // Android res 디렉토리와 playstore 아이콘 (main, development, staging flavors)
     final flavors = ['main', 'development', 'staging'];
-    final densities = [
-      'mipmap-xxxhdpi',
-      'mipmap-xxhdpi',
-      'mipmap-xhdpi',
-      'mipmap-mdpi',
-      'mipmap-hdpi',
-      'mipmap-anydpi-v26', // Adaptive icon
-      'drawable', // Base drawable directory
-      'drawable-xxxhdpi',
-      'drawable-xxhdpi',
-      'drawable-xhdpi',
-      'drawable-mdpi',
-      'drawable-hdpi',
-      'drawable-night', // Night theme base
-      'drawable-night-xxxhdpi',
-      'drawable-night-xxhdpi',
-      'drawable-night-xhdpi',
-      'drawable-night-mdpi',
-      'drawable-night-hdpi',
-      'drawable-v21', // API 21+ version
-      'drawable-night-v21', // Night theme API 21+
-    ];
 
     for (final flavor in flavors) {
-      for (final density in densities) {
-        final androidIconPath = path.join(
-          brickDir.path,
-          'android/app/src/$flavor/res/$density',
-        );
-        if (Directory(androidIconPath).existsSync()) {
-          iconPaths.add(androidIconPath);
-        }
+      // res 디렉토리 전체 백업
+      final androidResPath = path.join(
+        brickDir.path,
+        'android/app/src/$flavor/res',
+      );
+      if (Directory(androidResPath).existsSync()) {
+        iconPaths.add(androidResPath);
+      }
+
+      // ic_launcher-playstore.png 파일
+      final playstoreIconPath = path.join(
+        brickDir.path,
+        'android/app/src/$flavor/ic_launcher-playstore.png',
+      );
+      if (File(playstoreIconPath).existsSync()) {
+        iconPaths.add(playstoreIconPath);
       }
     }
 
@@ -432,17 +418,27 @@ class SyncAppService {
 
     // 임시 백업 디렉토리 생성
     final tempDir = Directory.systemTemp.createTempSync('icon_backup_');
-    logger.info('   📦 Backing up ${iconPaths.length} icon directory(ies)...');
+    logger.info('   📦 Backing up ${iconPaths.length} icon path(s)...');
 
-    // 아이콘 디렉토리들 백업
+    // 아이콘 디렉토리/파일들 백업
     for (final iconPath in iconPaths) {
-      final iconDir = Directory(iconPath);
       final relativePath = path.relative(iconPath, from: brickDir.path);
       final backupPath = path.join(tempDir.path, relativePath);
-      final backupDir = Directory(backupPath);
 
-      backupDir.createSync(recursive: true);
-      await _copyDirectoryContents(iconDir, backupDir);
+      // 디렉토리인 경우
+      if (FileSystemEntity.isDirectorySync(iconPath)) {
+        final iconDir = Directory(iconPath);
+        final backupDir = Directory(backupPath);
+        backupDir.createSync(recursive: true);
+        await _copyDirectoryContents(iconDir, backupDir);
+      }
+      // 파일인 경우
+      else if (FileSystemEntity.isFileSync(iconPath)) {
+        final iconFile = File(iconPath);
+        final backupFile = File(backupPath);
+        backupFile.parent.createSync(recursive: true);
+        await iconFile.copy(backupFile.path);
+      }
     }
 
     return tempDir;
