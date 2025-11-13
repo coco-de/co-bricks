@@ -369,8 +369,30 @@ class TemplateConverter {
         ),
       ]);
 
-      // 점(.) 패턴: dotCase 사용 (paramCase보다 우선 - 더 구체적)
-      // 주의: 밑줄(_)로 둘러싸이지 않은 경우만 매칭 (snakeCase와 구분)
+      // 하이픈(-) 패턴: paramCase 사용 (점 패턴보다 먼저 - 더 일반적)
+      // 주의: 밑줄(_)과 슬래시(/)로 둘러싸이지 않은 경우만 매칭
+      patterns.addAll([
+        ReplacementPattern(
+          RegExp('-${_escapeRegex(baseParam)}-'),
+          '-{{project_name.paramCase()}}-',
+        ),
+        ReplacementPattern(
+          RegExp('(?<!_)(?<!/)\\b${_escapeRegex(baseParam)}-'),
+          '{{project_name.paramCase()}}-',
+        ),
+        ReplacementPattern(
+          RegExp('-${_escapeRegex(baseParam)}\\b(?!_)(?!/)'),
+          '-{{project_name.paramCase()}}',
+        ),
+        // 단독 패턴: 밑줄, 점, 슬래시가 전후에 없는 경우 (기본값)
+        ReplacementPattern(
+          RegExp('(?<!_)(?<!\\.)(?<!/)\\b${_escapeRegex(baseParam)}\\b(?!_)(?!\\.)(?!/)'),
+          '{{project_name.paramCase()}}',
+        ),
+      ]);
+
+      // 점(.) 패턴: dotCase 사용 (실제로 점이 포함된 경우만)
+      // 주의: 양쪽에 점이 있거나 한쪽에 점이 있는 구체적인 경우만 매칭
       patterns.addAll([
         ReplacementPattern(
           RegExp('\\.${_escapeRegex(baseDot)}\\.'),
@@ -383,33 +405,6 @@ class TemplateConverter {
         ReplacementPattern(
           RegExp('\\.${_escapeRegex(baseDot)}\\b(?!_)'),
           '.{{project_name.dotCase()}}',
-        ),
-        // 밑줄 전후가 없는 경우만 매칭 (snakeCase 보호)
-        ReplacementPattern(
-          RegExp('(?<!_)\\b${_escapeRegex(baseDot)}\\b(?!_)'),
-          '{{project_name.dotCase()}}',
-        ),
-      ]);
-
-      // 하이픈(-) 패턴: paramCase 사용
-      // 주의: 밑줄(_)과 점(.)으로 둘러싸이지 않은 경우만 매칭 (snakeCase, dotCase와 구분)
-      patterns.addAll([
-        ReplacementPattern(
-          RegExp('-${_escapeRegex(baseParam)}-'),
-          '-{{project_name.paramCase()}}-',
-        ),
-        ReplacementPattern(
-          RegExp('(?<!_)\\b${_escapeRegex(baseParam)}-'),
-          '{{project_name.paramCase()}}-',
-        ),
-        ReplacementPattern(
-          RegExp('-${_escapeRegex(baseParam)}\\b(?!_)'),
-          '-{{project_name.paramCase()}}',
-        ),
-        // 밑줄과 점 전후가 없는 경우만 매칭 (snakeCase, dotCase 보호)
-        ReplacementPattern(
-          RegExp('(?<!_)(?<!\\.)\\b${_escapeRegex(baseParam)}\\b(?!_)(?!\\.)'),
-          '{{project_name.paramCase()}}',
         ),
       ]);
 
@@ -426,16 +421,8 @@ class TemplateConverter {
         ),
       ]);
 
-      // 따옴표 안의 패턴
+      // 따옴표 안의 패턴 (paramCase를 기본값으로 우선)
       patterns.addAll([
-        ReplacementPattern(
-          RegExp('"${_escapeRegex(baseSnake)}"'),
-          '"{{project_name.snakeCase()}}"',
-        ),
-        ReplacementPattern(
-          RegExp("'${_escapeRegex(baseSnake)}'"),
-          "'{{project_name.snakeCase()}}'",
-        ),
         ReplacementPattern(
           RegExp('"${_escapeRegex(baseParam)}"'),
           '"{{project_name.paramCase()}}"',
@@ -451,6 +438,14 @@ class TemplateConverter {
         ReplacementPattern(
           RegExp("'${_escapeRegex(baseDot)}'"),
           "'{{project_name.dotCase()}}'",
+        ),
+        ReplacementPattern(
+          RegExp('"${_escapeRegex(baseSnake)}"'),
+          '"{{project_name.snakeCase()}}"',
+        ),
+        ReplacementPattern(
+          RegExp("'${_escapeRegex(baseSnake)}'"),
+          "'{{project_name.snakeCase()}}'",
         ),
         ReplacementPattern(
           RegExp('"${_escapeRegex(baseTitle)}"'),
