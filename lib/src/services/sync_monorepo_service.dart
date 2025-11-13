@@ -6,6 +6,37 @@ import 'package:co_bricks/src/utils/template_converter.dart';
 import 'package:mason_logger/mason_logger.dart';
 import 'package:path/path.dart' as path;
 
+/// Mason 조건부 파일 구조 표현
+/// Git에서 {{#condition}}filename{{/ 디렉토리와 내부 condition}} 파일로 저장됨
+class ConditionalFileStructure {
+  ConditionalFileStructure({
+    required this.conditionalDirPath,
+    required this.conditionalDirName,
+    required this.innerFilePath,
+    required this.actualFileName,
+    required this.condition,
+    required this.relativeDir,
+  });
+
+  /// 조건부 디렉토리 전체 경로 (예: .../{{#has_graphql}}...{{/)
+  final String conditionalDirPath;
+
+  /// 조건부 디렉토리 이름 (예: {{#has_graphql}}sign_in_with_email_graphql_mixin.dart{{)
+  final String conditionalDirName;
+
+  /// 내부 파일 전체 경로 (예: .../{{#has_graphql}}...{{/has_graphql}})
+  final String innerFilePath;
+
+  /// 실제 파일명 (예: sign_in_with_email_graphql_mixin.dart)
+  final String actualFileName;
+
+  /// 조건 (예: has_graphql)
+  final String condition;
+
+  /// 상대 디렉토리 경로
+  final String relativeDir;
+}
+
 /// Monorepo 동기화 서비스
 class SyncMonorepoService {
   SyncMonorepoService(this.logger);
@@ -349,37 +380,75 @@ class SyncMonorepoService {
   ) async {
     logger.info('\n📁 Syncing $dirName...');
 
-    // Mason 조건부 파일들 매핑 수집 ({{#condition}}filename{{/condition}} 패턴)
-    final conditionalFileMap = <String, String>{};
+    // shared 디렉토리의 경우, dependencies/pubspec.yaml 조건부 라인 백업
+    List<String>? pubspecConditionalLines;
+    if (dirName == 'shared') {
+      pubspecConditionalLines =
+          await _backupPubspecConditionalLines(targetDir);
+    }
+
+    // Mason 조건부 파일 구조 스캔 및 백업
+    // Git에서는 {{#condition}}filename{{/ 디렉토리와 내부 condition}} 파일로 저장
+    final conditionalStructures = <ConditionalFileStructure>[];
+    final conditionalBackups = <String, List<int>>{}; // 내용 백업
+
+    logger.detail(
+      '   🔍 Scanning conditional file structures: ${targetDir.path}',
+    );
+
     if (targetDir.existsSync()) {
       await for (final entity in targetDir.list(recursive: true)) {
-        if (entity is File) {
-          final fileName = path.basename(entity.path);
-          // Mason 조건부 파일명 패턴 감지: {{#condition}}actualname{{/condition}}
-          final match = RegExp(
-            r'\{\{#(\w+)\}\}(.+?)\{\{/\1\}\}',
-          ).firstMatch(fileName);
+        if (entity is! Directory) continue;
 
-          if (match != null) {
-            final condition = match.group(1)!;
-            final actualFileName = match.group(2)!;
+        final dirName = path.basename(entity.path);
+
+        // 조건부 디렉토리 패턴: {{#condition}}filename{{
+        final dirMatch = RegExp(
+          r'^\{\{#(\w+)\}\}(.+)\{\{$',
+        ).firstMatch(dirName);
+
+        if (dirMatch != null) {
+          final condition = dirMatch.group(1)!;
+          final actualFileName = dirMatch.group(2)!;
+
+          // 디렉토리 내부의 condition}} 파일 찾기
+          final innerFileName = '$condition}}';
+          final innerFilePath = path.join(entity.path, innerFileName);
+          final innerFile = File(innerFilePath);
+
+          if (innerFile.existsSync()) {
             final relativePath = path.relative(
               entity.path,
               from: targetDir.path,
             );
-            final relativeDir = path.dirname(relativePath);
 
-            // 조건부 파일명 → 실제 파일명 매핑 저장
-            final key = path.join(relativeDir, actualFileName);
-            conditionalFileMap[key] = fileName;
+            final structure = ConditionalFileStructure(
+              conditionalDirPath: entity.path,
+              conditionalDirName: dirName,
+              innerFilePath: innerFilePath,
+              actualFileName: actualFileName,
+              condition: condition,
+              relativeDir: path.dirname(relativePath),
+            );
+
+            // 내용 백업 (copyDirectory가 삭제하기 전에)
+            final content = await innerFile.readAsBytes();
+            conditionalBackups[innerFilePath] = content;
+
+            conditionalStructures.add(structure);
 
             logger.info(
-              '   🔍 Found conditional file: $actualFileName → {{#$condition}}...',
+              '   🔍 Found conditional: $actualFileName ($condition) '
+              '[${content.length} bytes backed up]',
             );
           }
         }
       }
     }
+
+    logger.detail(
+      '   📊 Found ${conditionalStructures.length} conditional structures',
+    );
 
     // 타겟 디렉토리 생성
     targetDir.createSync(recursive: true);
@@ -389,33 +458,53 @@ class SyncMonorepoService {
     // 디렉토리 복사
     await FileUtils.copyDirectory(sourceDir, targetDir, overwrite: true);
 
-    // Mason 조건부 파일들 처리: 소스에서 복사된 파일을 조건부 이름으로 변경
-    for (final entry in conditionalFileMap.entries) {
-      final actualPath = entry.key;
-      final conditionalFileName = entry.value;
+    // Mason 조건부 파일 구조 복원
+    for (final structure in conditionalStructures) {
+      // Blueprint에서 복사된 파일 경로
+      final copiedFilePath = path.join(
+        targetDir.path,
+        structure.relativeDir,
+        structure.actualFileName,
+      );
+      final copiedFile = File(copiedFilePath);
 
-      // 소스에서 복사된 실제 파일
-      final copiedFile = File(path.join(targetDir.path, actualPath));
+      // 조건부 디렉토리 재생성 (copyDirectory가 삭제했음)
+      final conditionalDir = Directory(structure.conditionalDirPath);
+      if (!conditionalDir.existsSync()) {
+        await conditionalDir.create(recursive: true);
+      }
 
+      final innerFile = File(structure.innerFilePath);
+
+      // Blueprint에 해당 파일이 있으면 새 내용으로 업데이트
       if (copiedFile.existsSync()) {
-        // 조건부 파일명으로 이동
-        final conditionalPath = path.join(
-          path.dirname(copiedFile.path),
-          conditionalFileName,
+        // Blueprint 파일 내용을 조건부 구조 내부 파일로 복사
+        final content = await copiedFile.readAsBytes();
+        await innerFile.writeAsBytes(content);
+
+        // Blueprint 파일 삭제 (조건부 구조로 대체)
+        await copiedFile.delete();
+
+        logger.info(
+          '   ♻️  Updated conditional: ${structure.actualFileName} '
+          '(${structure.condition})',
         );
-        final conditionalFile = File(conditionalPath);
-
-        // 기존 조건부 파일 삭제 후 새 내용으로 교체
-        if (conditionalFile.existsSync()) {
-          await conditionalFile.delete();
-        }
-
-        await copiedFile.rename(conditionalPath);
-        logger.info('   ♻️  Updated conditional file: $conditionalFileName');
       } else {
-        logger.warn(
-          '   ⚠️  Source file not found for conditional: $actualPath',
-        );
+        // Blueprint에 파일이 없으면 백업에서 복원
+        final backupContent = conditionalBackups[structure.innerFilePath];
+        if (backupContent != null) {
+          await innerFile.writeAsBytes(backupContent);
+
+          logger.info(
+            '   ✓ Preserved conditional: ${structure.actualFileName} '
+            '(${structure.condition}) [${backupContent.length} bytes restored]',
+          );
+        } else {
+          logger.warn(
+            '   ⚠️  No backup for: ${structure.actualFileName} '
+            '(path: ${structure.innerFilePath})',
+          );
+        }
       }
     }
 
@@ -464,12 +553,243 @@ class SyncMonorepoService {
       await _convertConsoleToConditionalDir(targetDir);
     }
 
+    // shared 디렉토리의 dependencies/pubspec.yaml 조건부 라인 복원
+    if (dirName == 'shared' && pubspecConditionalLines != null) {
+      await _restorePubspecConditionalLines(
+        targetDir,
+        sourceDir,
+        pubspecConditionalLines,
+      );
+    }
+
     // 파일 처리 (네트워크별 mixin 파일들을 조건부 디렉토리로 변환)
     final stats = await _processFiles(targetDir, config, patterns);
     convertedFiles = stats['converted'] as int;
 
     logger.info('   ✅ $dirName synced:');
     logger.info('      • $convertedFiles files converted');
+  }
+
+  /// shared/dependencies/pubspec.yaml의 조건부 라인 백업
+  Future<List<String>> _backupPubspecConditionalLines(
+    Directory targetDir,
+  ) async {
+    final targetPubspec = File(
+      path.join(targetDir.path, 'dependencies', 'pubspec.yaml'),
+    );
+
+    if (!targetPubspec.existsSync()) {
+      return [];
+    }
+
+    final targetContent = await targetPubspec.readAsString();
+    final existingConditionalLines = <String>[];
+    final conditionalPattern = RegExp(
+      r'\{\{#has_\w+\}\}\w+_service:.+?\{\{/has_\w+\}\}',
+    );
+
+    for (final line in targetContent.split('\n')) {
+      if (conditionalPattern.hasMatch(line)) {
+        existingConditionalLines.add(line.trim());
+        logger.detail('   📋 Backed up conditional: ${line.trim()}');
+      }
+    }
+
+    if (existingConditionalLines.isNotEmpty) {
+      logger.info(
+        '   📋 Backed up ${existingConditionalLines.length} conditional '
+        'dependencies from pubspec.yaml',
+      );
+    }
+
+    return existingConditionalLines;
+  }
+
+  /// shared/dependencies/pubspec.yaml의 조건부 dependency 라인들을 보존
+  ///
+  /// 1. Blueprint에서 service dependencies를 조건부로 변환
+  /// 2. 백업된 조건부 라인 중 누락된 것들을 추가
+  /// 3. 항상 모든 서비스(openapi, graphql, serverpod)를 조건부로 유지
+  Future<void> _restorePubspecConditionalLines(
+    Directory targetDir,
+    Directory sourceDir,
+    List<String> existingConditionalLines,
+  ) async {
+    final targetPubspec = File(
+      path.join(targetDir.path, 'dependencies', 'pubspec.yaml'),
+    );
+    final sourcePubspec = File(
+      path.join(sourceDir.path, 'dependencies', 'pubspec.yaml'),
+    );
+
+    if (!targetPubspec.existsSync() || !sourcePubspec.existsSync()) {
+      return;
+    }
+
+    logger.info('   🔄 Preserving conditional dependencies in pubspec.yaml...');
+
+    // Blueprint 내용 읽기
+    final sourceContent = await sourcePubspec.readAsString();
+    final sourceLines = sourceContent.split('\n');
+    final result = <String>[];
+    var inDependenciesSection = false;
+    final addedServices = <String>{};
+
+    // 네트워크/백엔드 서비스 패턴 (Brick이 항상 가져야 하는 것들)
+    final servicePatterns = {
+      'openapi_service': 'has_openapi',
+      'graphql_service': 'has_graphql',
+      'serverpod_service': 'has_serverpod',
+    };
+
+    String? lastServiceIndent;
+    var foundResourcesLine = false;
+
+    for (var line in sourceLines) {
+      final trimmed = line.trim();
+
+      // dependencies: 섹션 시작
+      if (trimmed == 'dependencies:') {
+        inDependenciesSection = true;
+        result.add(line);
+        continue;
+      }
+
+      // dev_dependencies: 섹션 시작
+      if (trimmed == 'dev_dependencies:') {
+        inDependenciesSection = false;
+        result.add(line);
+        continue;
+      }
+
+      // dependencies 섹션 내부의 서비스 의존성들을 조건부로 변환
+      if (inDependenciesSection) {
+        var wasConverted = false;
+
+        // resources: 라인 감지 (서비스들은 이 직후에 추가됨)
+        if (trimmed.startsWith('resources:')) {
+          foundResourcesLine = true;
+          result.add(line);
+          continue;
+        }
+
+        for (final entry in servicePatterns.entries) {
+          final serviceName = entry.key;
+          final conditionalFlag = entry.value;
+
+          // 정확한 패키지 이름 매칭 (예: "serverpod_service:")
+          if (trimmed.startsWith('$serviceName:')) {
+            // 이미 조건부인지 확인
+            if (!line.contains('{{#')) {
+              // 들여쓰기 유지하면서 조건부로 변환
+              final indent = line.substring(0, line.indexOf(serviceName));
+              lastServiceIndent = indent;
+              result.add(
+                '$indent{{#$conditionalFlag}}$trimmed{{/$conditionalFlag}}',
+              );
+              addedServices.add(serviceName);
+              wasConverted = true;
+              logger.detail(
+                '   🔄 Converted to conditional: $serviceName',
+              );
+
+              // 변환된 서비스 바로 다음에 누락된 다른 서비스들 추가
+              for (final missingEntry in servicePatterns.entries) {
+                final missingService = missingEntry.key;
+                final missingFlag = missingEntry.value;
+
+                if (!addedServices.contains(missingService)) {
+                  // 백업된 조건부 라인에서 찾기
+                  String? existingLine;
+                  for (final backupLine in existingConditionalLines) {
+                    if (backupLine.contains(missingService)) {
+                      existingLine = backupLine;
+                      break;
+                    }
+                  }
+
+                  if (existingLine != null) {
+                    // 백업된 라인 사용
+                    result.add('$indent$existingLine');
+                    logger.detail(
+                      '   ✅ Restored from backup: $existingLine',
+                    );
+                  } else {
+                    // 새로 생성 (기본 버전 0.1.0)
+                    final conditionalLine =
+                        '{{#$missingFlag}}$missingService: ^0.1.0{{/$missingFlag}}';
+                    result.add('$indent$conditionalLine');
+                    logger.detail(
+                      '   ✨ Added missing service: $conditionalLine',
+                    );
+                  }
+
+                  addedServices.add(missingService);
+                }
+              }
+
+              break;
+            }
+          }
+        }
+
+        // 변환되지 않았으면 원본 라인 유지
+        if (!wasConverted) {
+          result.add(line);
+        }
+      } else {
+        // dependencies 섹션 외부는 그대로 유지
+        result.add(line);
+      }
+    }
+
+    // 만약 어떤 서비스도 변환되지 않았다면 (Blueprint에 서비스가 없는 경우)
+    // resources 라인 바로 뒤에 모든 서비스를 추가
+    if (addedServices.isEmpty && foundResourcesLine) {
+      final insertIndex = result.indexWhere(
+        (line) => line.trim().startsWith('resources:'),
+      );
+      if (insertIndex != -1) {
+        final resourcesLine = result[insertIndex];
+        final indent = resourcesLine.substring(
+          0,
+          resourcesLine.indexOf('resources:'),
+        );
+
+        // resources 라인 다음 위치에 모든 서비스 삽입
+        var insertPos = insertIndex + 1;
+        for (final entry in servicePatterns.entries) {
+          final serviceName = entry.key;
+          final conditionalFlag = entry.value;
+
+          // 백업된 조건부 라인에서 찾기
+          String? existingLine;
+          for (final line in existingConditionalLines) {
+            if (line.contains(serviceName)) {
+              existingLine = line;
+              break;
+            }
+          }
+
+          if (existingLine != null) {
+            result.insert(insertPos++, '$indent$existingLine');
+            logger.detail('   ✅ Restored from backup: $existingLine');
+          } else {
+            final conditionalLine =
+                '{{#$conditionalFlag}}$serviceName: ^0.1.0{{/$conditionalFlag}}';
+            result.insert(insertPos++, '$indent$conditionalLine');
+            logger.detail('   ✨ Added missing service: $conditionalLine');
+          }
+        }
+      }
+    }
+
+    // 변환된 내용 저장
+    await targetPubspec.writeAsString(result.join('\n'));
+
+    logger.info(
+      '   ✅ Preserved conditional dependencies in pubspec.yaml',
+    );
   }
 
   /// feature 디렉토리의 console을 조건부 디렉토리로 변환
@@ -492,29 +812,36 @@ class SyncMonorepoService {
 
     logger.info('   🔄 Converting console to conditional directory...');
 
-    // 기존 조건부 디렉토리가 있으면 삭제
-    if (outerDir.existsSync()) {
-      await outerDir.delete(recursive: true);
+    // 기존 조건부 디렉토리가 있으면 삭제하지 않고 병합
+    // (조건부 파일들이 이미 복원되어 있을 수 있음)
+    if (!outerDir.existsSync()) {
+      outerDir.createSync(recursive: true);
     }
 
-    // 외부 디렉토리 생성
-    outerDir.createSync(recursive: true);
-
-    // 2단계: 내부에 enable_admin}} 디렉토리 생성 (슬래시 없이)
+    // 2단계: 내부에 enable_admin}} 디렉토리 생성
     const innerDirName = 'enable_admin}}';
     final innerDir = Directory(path.join(outerDir.path, innerDirName));
-    innerDir.createSync(recursive: true);
+    if (!innerDir.existsSync()) {
+      innerDir.createSync(recursive: true);
+    }
 
-    // console 디렉토리의 모든 내용을 innerDir로 복사
+    // console 디렉토리의 내용을 innerDir로 복사 (조건부 파일 구조는 건너뜀)
     await for (final entity in consoleDir.list(recursive: false)) {
       final entityName = path.basename(entity.path);
       final targetPath = path.join(innerDir.path, entityName);
+
+      // 이미 존재하는 항목은 건너뜀 (조건부 파일 복원에서 온 것)
+      if (await FileSystemEntity.type(targetPath) !=
+          FileSystemEntityType.notFound) {
+        logger.detail('   ⏭️  Skipping existing: $entityName');
+        continue;
+      }
 
       if (entity is Directory) {
         await FileUtils.copyDirectory(
           entity,
           Directory(targetPath),
-          overwrite: true,
+          overwrite: false, // 기존 파일 보존
         );
       } else if (entity is File) {
         await entity.copy(targetPath);
@@ -1678,7 +2005,8 @@ class SyncMonorepoService {
       }
 
       // scripts: 섹션 시작 감지
-      if (trimmed == 'scripts:' || (line.startsWith('  ') && trimmed == 'scripts:')) {
+      if (trimmed == 'scripts:' ||
+          (line.startsWith('  ') && trimmed == 'scripts:')) {
         inScriptsSection = true;
         scriptIndent = line.substring(0, line.indexOf('scripts:'));
         result.add(line);
@@ -1687,7 +2015,8 @@ class SyncMonorepoService {
 
       // 섹션이 끝났는지 확인 (다음 최상위 키 발견)
       if ((inPackagesSection || inWorkspaceSection) &&
-          line.isNotEmpty && !line.startsWith(' ')) {
+          line.isNotEmpty &&
+          !line.startsWith(' ')) {
         // has_serverpod 블록이 열려있으면 닫기
         if (inHasServerpodBlock) {
           result.add('{{/has_serverpod}}');
@@ -1712,7 +2041,8 @@ class SyncMonorepoService {
       }
 
       // packages/workspace 섹션 내부 처리
-      if ((inPackagesSection || inWorkspaceSection) && trimmed.startsWith('- ')) {
+      if ((inPackagesSection || inWorkspaceSection) &&
+          trimmed.startsWith('- ')) {
         // console app 패키지 처리
         if (line.contains('${projectName}_console') ||
             line.contains('backend/${projectName}_console')) {
@@ -1793,7 +2123,9 @@ class SyncMonorepoService {
         // resources 패키지 처리 - 다음 라인에 백엔드 서비스 패키지들 추가
         if (line.contains('package/resources')) {
           result.add('  - package/resources{{#has_serverpod}}');
-          result.add('  - package/serverpod_service{{/has_serverpod}}{{#has_openapi}}');
+          result.add(
+            '  - package/serverpod_service{{/has_serverpod}}{{#has_openapi}}',
+          );
           result.add('  - package/openapi_service');
           result.add('  - package/openapi{{/has_openapi}}');
           continue;
@@ -1826,7 +2158,8 @@ class SyncMonorepoService {
         // console 관련 echo 라인 감지 (단일 라인 조건부 처리)
         if (line.contains('echo') &&
             (line.contains('console_router') ||
-             (line.contains('Console') && line.contains('dependBuild:feature:console')))) {
+                (line.contains('Console') &&
+                    line.contains('dependBuild:feature:console')))) {
           // echo 라인을 조건부로 감싸기
           final patterns = TemplateConverter.buildPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
@@ -1937,7 +2270,9 @@ class SyncMonorepoService {
         // dependsOn: 직전에 조건부 항목 추가
         final itemIndent = '$ignoreIndent      ';
         result
-          ..add('$itemIndent- "serverpod_service"{{/has_serverpod}}{{#has_openapi}}')
+          ..add(
+            '$itemIndent- "serverpod_service"{{/has_serverpod}}{{#has_openapi}}',
+          )
           ..add('$itemIndent- "openapi_service"')
           ..add('$itemIndent- "openapi"{{/has_openapi}}');
         inBuildSelectIgnore = false;
@@ -2038,7 +2373,8 @@ class SyncMonorepoService {
       // skeletonizer 다음에 openapi/graphql 블록 준비
       if (trimmed.startsWith('skeletonizer:')) {
         // 다음 줄에 실제 openapi 패키지가 있는지 확인
-        final hasOpenapiPkg = i + 1 < lines.length &&
+        final hasOpenapiPkg =
+            i + 1 < lines.length &&
             lines[i + 1].trim().startsWith(firstOpenapiPkg);
 
         if (hasOpenapiPkg) {
@@ -2046,7 +2382,8 @@ class SyncMonorepoService {
           line = '$line{{#has_openapi}}';
         } else {
           // openapi 패키지가 없으면 빈 블록 구조 생성
-          line = '$line{{#has_openapi}}{{/has_openapi}}{{#has_graphql}}{{/has_graphql}}';
+          line =
+              '$line{{#has_openapi}}{{/has_openapi}}{{#has_graphql}}{{/has_graphql}}';
         }
         result.add(line);
         continue;
