@@ -370,6 +370,12 @@ class SyncAppService {
     // 백업할 아이콘 디렉토리 경로들
     final iconPaths = <String>[];
 
+    // assets/icons 디렉토리
+    final assetsIconPath = path.join(brickDir.path, 'assets/icons');
+    if (Directory(assetsIconPath).existsSync()) {
+      iconPaths.add(assetsIconPath);
+    }
+
     // iOS Assets.xcassets
     final iosIconPath = path.join(brickDir.path, 'ios/Runner/Assets.xcassets');
     if (Directory(iosIconPath).existsSync()) {
