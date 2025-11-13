@@ -205,6 +205,14 @@ class SyncAppService {
       } else if (entity is File) {
         // 파일명 변환
         final originalFileName = path.basename(entity.path);
+
+        // Flutter LLDB 관련 파일 제외 (ephemeral 디렉토리)
+        if (entity.path.contains('ios/Flutter/ephemeral') &&
+            (originalFileName == 'flutter_lldb_helper.py' ||
+                originalFileName == 'flutter_lldbinit')) {
+          continue;
+        }
+
         final newFileName = FileUtils.convertFileName(
           originalFileName,
           config.projectNames,
