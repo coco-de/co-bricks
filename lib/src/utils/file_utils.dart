@@ -10,7 +10,8 @@ class FileUtils {
     'build',
     'node_modules',
     'Pods',
-    '.git', // .github, .githooks는 포함해야 하므로 정확히 .git만
+    '.git',
+    '.github', // GitHub Actions workflows 등 제외
   ];
 
   /// 제외할 파일 패턴 (파일명 기반)
@@ -81,6 +82,16 @@ class FileUtils {
           normalizedPath.contains('_server/migrations/')) {
         return true;
       }
+
+      // shared/i10n/lib/src/json/**/* (i18n 번역 파일 제외)
+      if (normalizedPath.contains('/shared/i10n/lib/src/json/')) {
+        return true;
+      }
+
+      // shared/i10n_web/lib/src/json/**/* (i18n_web 번역 파일 제외)
+      if (normalizedPath.contains('/shared/i10n_web/lib/src/json/')) {
+        return true;
+      }
     }
 
     return false;
@@ -129,12 +140,14 @@ class FileUtils {
     // 경로가 /android/app/src/{flavor}/res/ 바로 아래에 있는지 확인
     if (normalizedPath.contains('/android/app/src/')) {
       // main, development, staging flavor의 res 디렉토리 바로 아래인지 확인
-      final isMainRes = normalizedPath.endsWith('/main/res/$dirName') ||
+      final isMainRes =
+          normalizedPath.endsWith('/main/res/$dirName') ||
           normalizedPath.contains('/main/res/$dirName/');
       final isDevelopmentRes =
           normalizedPath.endsWith('/development/res/$dirName') ||
-              normalizedPath.contains('/development/res/$dirName/');
-      final isStagingRes = normalizedPath.endsWith('/staging/res/$dirName') ||
+          normalizedPath.contains('/development/res/$dirName/');
+      final isStagingRes =
+          normalizedPath.endsWith('/staging/res/$dirName') ||
           normalizedPath.contains('/staging/res/$dirName/');
 
       if ((isMainRes || isDevelopmentRes || isStagingRes) &&
