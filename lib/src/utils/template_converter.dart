@@ -77,7 +77,7 @@ class TemplateConverter {
     patterns.addAll(_buildUrlSchemePatterns(projectNames));
 
     // 6. 프로젝트명 패턴
-    patterns.addAll(_buildProjectPatterns(projectNames));
+    patterns.addAll(_buildProjectPatterns(projectNames, orgTlds));
 
     // 7. 조직명 패턴
     patterns.addAll(_buildOrgPatterns(orgNames));
@@ -320,6 +320,7 @@ class TemplateConverter {
   /// 프로젝트명 패턴 생성
   static List<ReplacementPattern> _buildProjectPatterns(
     List<String> projectNames,
+    List<String> orgTlds,
   ) {
     final patterns = <ReplacementPattern>[];
 
@@ -332,7 +333,28 @@ class TemplateConverter {
           .map((word) => word[0].toUpperCase() + word.substring(1))
           .join(' ');
 
-      // 복합 이름 패턴 (더 긴 suffix를 먼저 처리)
+      // Dart/Flutter 컨텍스트 패턴 (최우선 - snakeCase 유지)
+      // package: imports, pubspec.yaml name 등 Dart 코드 컨텍스트
+      for (final suffix in [
+        '_http_module',
+        '_service_module',
+        '_server',
+        '_client',
+        '_widgetbook',
+        '_console',
+        '_service',
+        '_module',
+      ]) {
+        // package: import 패턴 (Dart import 문)
+        patterns.add(
+          ReplacementPattern(
+            RegExp('package:${_escapeRegex(baseSnake)}$suffix/'),
+            'package:{{project_name.snakeCase()}}$suffix/',
+          ),
+        );
+      }
+
+      // pubspec.yaml의 name 필드 (Dart 패키지명은 snake_case 필수)
       for (final suffix in [
         '_http_module',
         '_service_module',
@@ -345,14 +367,565 @@ class TemplateConverter {
       ]) {
         patterns.add(
           ReplacementPattern(
+            RegExp('name:\\s*${_escapeRegex(baseSnake)}$suffix\\b'),
+            'name: {{project_name.snakeCase()}}$suffix',
+          ),
+        );
+      }
+
+      // Docker 이미지명 패턴 (snake_case 사용)
+      // docker build -t project_name_server → docker build -t {{project_name.snakeCase()}}_server
+      for (final suffix in [
+        '_server',
+        '_client',
+        '_widgetbook',
+        '_console',
+      ]) {
+        // docker build -t pattern (snake_case 유지)
+        patterns.add(
+          ReplacementPattern(
+            RegExp('docker build -t ${_escapeRegex(baseSnake)}$suffix'),
+            'docker build -t {{project_name.snakeCase()}}$suffix',
+          ),
+        );
+        // docker build -t pattern (param-case를 snake_case로 변환)
+        final paramSuffix = suffix.replaceAll('_', '-');
+        patterns.add(
+          ReplacementPattern(
+            RegExp('docker build -t ${_escapeRegex(baseParam)}$paramSuffix'),
+            'docker build -t {{project_name.snakeCase()}}$suffix',
+          ),
+        );
+      }
+
+      // Serverpod generator.yaml 파일 패턴 (snake_case 유지)
+      // client_package_path는 Dart 패키지 경로이므로 snake_case 사용
+      // 예: client_package_path: ../blueprint_client →
+      //     ../{{project_name.snakeCase()}}_client
+
+      // client_package_path 패턴 (snake_case 유지)
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'client_package_path:\\s*\\.\\./\\.\\./\\s*${_escapeRegex(baseSnake)}_client',
+          ),
+          'client_package_path: ../../{{project_name.snakeCase()}}_client',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'client_package_path:\\s*\\.\\./\\s*${_escapeRegex(baseSnake)}_client',
+          ),
+          'client_package_path: ../{{project_name.snakeCase()}}_client',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'client_package_path:\\s*\\.\\./\\s*${_escapeRegex(baseParam)}-client',
+          ),
+          'client_package_path: ../{{project_name.snakeCase()}}_client',
+        ),
+      );
+
+      // VSCode launch.json 패턴 (snake_case 유지)
+      // "cwd": "./app/blueprint_console/" →
+      // "cwd": "./app/{{project_name.snakeCase()}}_console/"
+      for (final suffix in ['_console', '_widgetbook']) {
+        patterns.add(
+          ReplacementPattern(
+            RegExp('"cwd":\\s*"\\./app/${_escapeRegex(baseSnake)}$suffix/"'),
+            '"cwd": "./app/{{project_name.snakeCase()}}$suffix/"',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              '"cwd":\\s*"\\./app/${_escapeRegex(baseParam)}${suffix.replaceAll('_', '-')}/"',
+            ),
+            '"cwd": "./app/{{project_name.snakeCase()}}$suffix/"',
+          ),
+        );
+      }
+
+      // VSCode launch.json program 패턴 (snake_case 유지)
+      // "program": "app/blueprint_widgetbook/lib/main.dart"
+      for (final suffix in ['_console', '_widgetbook']) {
+        patterns.add(
+          ReplacementPattern(
+            RegExp('"program":\\s*"app/${_escapeRegex(baseSnake)}$suffix/'),
+            '"program": "app/{{project_name.snakeCase()}}$suffix/',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              '"program":\\s*"app/${_escapeRegex(baseParam)}${suffix.replaceAll('_', '-')}/',
+            ),
+            '"program": "app/{{project_name.snakeCase()}}$suffix/',
+          ),
+        );
+      }
+
+      // GitHub workflows WORKING_DIRECTORY 패턴 (snake_case 유지)
+      // WORKING_DIRECTORY: app/blueprint_console
+      for (final suffix in ['_console', '_widgetbook', '_server']) {
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              'WORKING_DIRECTORY:\\s*app/${_escapeRegex(baseSnake)}$suffix\\b',
+            ),
+            'WORKING_DIRECTORY: app/{{project_name.snakeCase()}}$suffix',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              'WORKING_DIRECTORY:\\s*app/${_escapeRegex(baseParam)}${suffix.replaceAll('_', '-')}\\b',
+            ),
+            'WORKING_DIRECTORY: app/{{project_name.snakeCase()}}$suffix',
+          ),
+        );
+      }
+
+      // Melos scope 패턴 (snake_case 유지)
+      // scope: "blueprint_server" → scope: "{{project_name.snakeCase()}}_server"
+      for (final suffix in ['_server', '_client']) {
+        patterns.add(
+          ReplacementPattern(
+            RegExp('scope:\\s*"${_escapeRegex(baseSnake)}$suffix"'),
+            'scope: "{{project_name.snakeCase()}}$suffix"',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              'scope:\\s*"${_escapeRegex(baseParam)}${suffix.replaceAll('_', '-')}"',
+            ),
+            'scope: "{{project_name.snakeCase()}}$suffix"',
+          ),
+        );
+      }
+
+      // Melos CLI flag patterns (--scope blueprint_console)
+      // melos exec --scope blueprint_console → melos exec --scope {{project_name.snakeCase()}}_console
+      for (final suffix in ['_console', '_widgetbook', '_server', '_client']) {
+        // snake_case CLI flags
+        patterns.add(
+          ReplacementPattern(
+            RegExp('--scope\\s+${_escapeRegex(baseSnake)}$suffix\\b'),
+            '--scope {{project_name.snakeCase()}}$suffix',
+          ),
+        );
+        // param-case CLI flags
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              '--scope\\s+${_escapeRegex(baseParam)}${suffix.replaceAll('_', '-')}\\b',
+            ),
+            '--scope {{project_name.snakeCase()}}$suffix',
+          ),
+        );
+      }
+
+      // 문서/설정 파일 경로 패턴 (snake_case 유지)
+      // backend/blueprint_client/ → backend/{{project_name.snakeCase()}}_client/
+      // backend/blueprint_server/ → backend/{{project_name.snakeCase()}}_server/
+      // app/blueprint_console/ → app/{{project_name.snakeCase()}}_console/
+      // app/blueprint_widgetbook/ → app/{{project_name.snakeCase()}}_widgetbook/
+
+      // backend/ 경로 패턴
+      for (final suffix in ['_client', '_server']) {
+        // backend/blueprint_client/ 형태
+        patterns.add(
+          ReplacementPattern(
+            RegExp('backend/${_escapeRegex(baseSnake)}$suffix/'),
+            'backend/{{project_name.snakeCase()}}$suffix/',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              'backend/${_escapeRegex(baseParam)}${suffix.replaceAll('_', '-')}/',
+            ),
+            'backend/{{project_name.snakeCase()}}$suffix/',
+          ),
+        );
+
+        // backend/blueprint_client 형태 (슬래시 없음)
+        patterns.add(
+          ReplacementPattern(
+            RegExp('backend/${_escapeRegex(baseSnake)}$suffix\\b'),
+            'backend/{{project_name.snakeCase()}}$suffix',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              'backend/${_escapeRegex(baseParam)}${suffix.replaceAll('_', '-')}\\b',
+            ),
+            'backend/{{project_name.snakeCase()}}$suffix',
+          ),
+        );
+      }
+
+      // app/ 경로 패턴
+      for (final suffix in ['_console', '_widgetbook']) {
+        // app/blueprint_console/ 형태
+        patterns.add(
+          ReplacementPattern(
+            RegExp('app/${_escapeRegex(baseSnake)}$suffix/'),
+            'app/{{project_name.snakeCase()}}$suffix/',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              'app/${_escapeRegex(baseParam)}${suffix.replaceAll('_', '-')}/',
+            ),
+            'app/{{project_name.snakeCase()}}$suffix/',
+          ),
+        );
+
+        // app/blueprint_console 형태 (슬래시 없음)
+        patterns.add(
+          ReplacementPattern(
+            RegExp('app/${_escapeRegex(baseSnake)}$suffix\\b'),
+            'app/{{project_name.snakeCase()}}$suffix',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              'app/${_escapeRegex(baseParam)}${suffix.replaceAll('_', '-')}\\b',
+            ),
+            'app/{{project_name.snakeCase()}}$suffix',
+          ),
+        );
+      }
+
+      // package import 경로 패턴 (Markdown 코드 블록 등)
+      // package:blueprint_client/blueprint_client.dart
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'package:${_escapeRegex(baseSnake)}_client/${_escapeRegex(baseSnake)}_client\\.dart',
+          ),
+          'package:{{project_name.snakeCase()}}_client/{{project_name.snakeCase()}}_client.dart',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'package:${_escapeRegex(baseParam)}-client/${_escapeRegex(baseParam)}-client\\.dart',
+          ),
+          'package:{{project_name.snakeCase()}}_client/{{project_name.snakeCase()}}_client.dart',
+        ),
+      );
+
+      // 파일명 단독 패턴 (blueprint_client.dart)
+      // 이미 경로가 변환된 후 파일명만 남은 경우
+      patterns.add(
+        ReplacementPattern(
+          RegExp('/${_escapeRegex(baseSnake)}_client\\.dart'),
+          '/{{project_name.snakeCase()}}_client.dart',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('/${_escapeRegex(baseParam)}-client\\.dart'),
+          '/{{project_name.snakeCase()}}_client.dart',
+        ),
+      );
+
+      // 단독 디렉토리명 패턴 (경로 접두사 없이 나타나는 경우)
+      // 디렉토리 트리 표현이나 주석에서 사용
+      // blueprint_console/      # 관리자 앱
+      // blueprint_client/       # 클라이언트 SDK
+      for (final suffix in ['_console', '_widgetbook', '_client', '_server']) {
+        // 슬래시가 있는 형태 (디렉토리 표현)
+        patterns.add(
+          ReplacementPattern(
+            RegExp('(?<!/)${_escapeRegex(baseSnake)}$suffix/'),
+            '{{project_name.snakeCase()}}$suffix/',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              '(?<!/)${_escapeRegex(baseParam)}${suffix.replaceAll('_', '-')}/',
+            ),
+            '{{project_name.snakeCase()}}$suffix/',
+          ),
+        );
+      }
+
+      // Glob wildcard patterns for YAML arrays
+      // - "*blueprint_client*" → - "*{{project_name.snakeCase()}}_client*"
+      for (final suffix in ['_console', '_widgetbook', '_server', '_client']) {
+        // snake_case with wildcards
+        patterns.add(
+          ReplacementPattern(
+            RegExp('"\\*${_escapeRegex(baseSnake)}$suffix\\*"'),
+            '"*{{project_name.snakeCase()}}$suffix*"',
+          ),
+        );
+        // param-case with wildcards
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              '"\\*${_escapeRegex(baseParam)}${suffix.replaceAll('_', '-')}\\*"',
+            ),
+            '"*{{project_name.snakeCase()}}$suffix*"',
+          ),
+        );
+      }
+
+      // Parenthesis context patterns (echo strings, port specifications)
+      // blueprint_console(8083) → {{project_name.snakeCase()}}_console(8083)
+      for (final suffix in ['_console', '_widgetbook', '_server', '_client']) {
+        // snake_case with parenthesis
+        patterns.add(
+          ReplacementPattern(
+            RegExp('${_escapeRegex(baseSnake)}$suffix\\('),
+            '{{project_name.snakeCase()}}$suffix(',
+          ),
+        );
+        // param-case with parenthesis
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              '${_escapeRegex(baseParam)}${suffix.replaceAll('_', '-')}\\(',
+            ),
+            '{{project_name.snakeCase()}}$suffix(',
+          ),
+        );
+      }
+
+      // YAML string array item patterns
+      // - "blueprint_client" → - "{{project_name.snakeCase()}}_client"
+      for (final suffix in ['_console', '_widgetbook', '_server', '_client']) {
+        // snake_case in YAML string arrays
+        patterns.add(
+          ReplacementPattern(
+            RegExp('- "${_escapeRegex(baseSnake)}$suffix"'),
+            '- "{{project_name.snakeCase()}}$suffix"',
+          ),
+        );
+        // param-case in YAML string arrays
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              '- "${_escapeRegex(baseParam)}${suffix.replaceAll('_', '-')}"',
+            ),
+            '- "{{project_name.snakeCase()}}$suffix"',
+          ),
+        );
+      }
+
+      // Plain text in descriptions and comments
+      // description: "blueprint_console 웹 앱을..." → description: "{{project_name.snakeCase()}}_console 웹 앱을..."
+      for (final suffix in ['_console', '_widgetbook', '_server', '_client']) {
+        // snake_case in plain text
+        patterns.add(
+          ReplacementPattern(
+            RegExp('\\b${_escapeRegex(baseSnake)}$suffix\\b'),
+            '{{project_name.snakeCase()}}$suffix',
+          ),
+        );
+        // param-case in plain text
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              '\\b${_escapeRegex(baseParam)}${suffix.replaceAll('_', '-')}\\b',
+            ),
+            '{{project_name.snakeCase()}}$suffix',
+          ),
+        );
+      }
+
+      // PostgreSQL JDBC URL 패턴
+      // jdbc:postgresql://localhost:8090/blueprint → jdbc:postgresql://localhost:8090/{{project_name.paramCase()}}
+      // jdbc:postgresql://localhost:9090/blueprint_test → jdbc:postgresql://localhost:9090/{{project_name.paramCase()}}-test
+
+      // Base database name (no suffix)
+      patterns.add(
+        ReplacementPattern(
+          RegExp('jdbc:postgresql://([^/]+)/${_escapeRegex(baseSnake)}\\b'),
+          'jdbc:postgresql://\$1/{{project_name.paramCase()}}',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('jdbc:postgresql://([^/]+)/${_escapeRegex(baseParam)}\\b'),
+          'jdbc:postgresql://\$1/{{project_name.paramCase()}}',
+        ),
+      );
+
+      // JDBC URL with database suffix patterns
+      for (final suffix in [
+        '_test',
+        '_dev',
+        '_development',
+        '_staging',
+        '_prod',
+        '_production',
+      ]) {
+        final paramSuffix = suffix.replaceAll('_', '-');
+        // snake_case JDBC URLs
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              'jdbc:postgresql://([^/]+)/${_escapeRegex(baseSnake)}$suffix\\b',
+            ),
+            'jdbc:postgresql://\$1/{{project_name.paramCase()}}$paramSuffix',
+          ),
+        );
+        // param-case JDBC URLs
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              'jdbc:postgresql://([^/]+)/${_escapeRegex(baseParam)}$paramSuffix\\b',
+            ),
+            'jdbc:postgresql://\$1/{{project_name.paramCase()}}$paramSuffix',
+          ),
+        );
+      }
+
+      // AWS Lambda 함수 이름 패턴
+      // /aws/lambda/blueprint_push-forwarder-production → /aws/lambda/{{project_name.paramCase()}}-push-forwarder-production
+      // --log-group-name "/aws/lambda/blueprint_push-forwarder-production" → "/aws/lambda/{{project_name.paramCase()}}-push-forwarder-production"
+      for (final suffix in [
+        '-push-forwarder-production',
+        '-push-forwarder-staging',
+        '-push-forwarder-development',
+        '_push-forwarder-production',
+        '_push-forwarder-staging',
+        '_push-forwarder-development',
+      ]) {
+        // snake_case Lambda 함수명
+        patterns.add(
+          ReplacementPattern(
+            RegExp('/aws/lambda/${_escapeRegex(baseSnake)}$suffix'),
+            '/aws/lambda/{{project_name.paramCase()}}${suffix.replaceAll('_', '-')}',
+          ),
+        );
+        // param-case Lambda 함수명
+        patterns.add(
+          ReplacementPattern(
+            RegExp('/aws/lambda/${_escapeRegex(baseParam)}$suffix'),
+            '/aws/lambda/{{project_name.paramCase()}}${suffix.replaceAll('_', '-')}',
+          ),
+        );
+      }
+
+      // Terraform state 파일 키 패턴
+      // key = "blueprint/terraform.tfstate" → key = "{{project_name.paramCase()}}/terraform.tfstate"
+      patterns.add(
+        ReplacementPattern(
+          RegExp('key\\s*=\\s*"${_escapeRegex(baseSnake)}/terraform\\.tfstate"'),
+          'key    = "{{project_name.paramCase()}}/terraform.tfstate"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('key\\s*=\\s*"${_escapeRegex(baseParam)}/terraform\\.tfstate"'),
+          'key    = "{{project_name.paramCase()}}/terraform.tfstate"',
+        ),
+      );
+
+      // AWS SQS 큐 URL 패턴
+      // --queue-url "https://sqs.ap-northeast-2.amazonaws.com/YOUR_ACCOUNT/blueprint_push-queue-production"
+      // → --queue-url "https://sqs.ap-northeast-2.amazonaws.com/YOUR_ACCOUNT/{{project_name.paramCase()}}-push-queue-production"
+      for (final suffix in [
+        '-push-queue-production',
+        '-push-queue-staging',
+        '-push-queue-development',
+        '_push-queue-production',
+        '_push-queue-staging',
+        '_push-queue-development',
+      ]) {
+        // snake_case SQS 큐명
+        patterns.add(
+          ReplacementPattern(
+            RegExp('amazonaws\\.com/[^/]+/${_escapeRegex(baseSnake)}$suffix'),
+            'amazonaws.com/YOUR_ACCOUNT/{{project_name.paramCase()}}${suffix.replaceAll('_', '-')}',
+          ),
+        );
+        // param-case SQS 큐명
+        patterns.add(
+          ReplacementPattern(
+            RegExp('amazonaws\\.com/[^/]+/${_escapeRegex(baseParam)}$suffix'),
+            'amazonaws.com/YOUR_ACCOUNT/{{project_name.paramCase()}}${suffix.replaceAll('_', '-')}',
+          ),
+        );
+      }
+
+      // URL 경로 패턴 (https://.../.well-known/)
+      // https://blueprint.im/.well-known/ → https://{{project_name.paramCase()}}.{{org_tld}}/.well-known/
+      for (final orgTld in orgTlds) {
+        patterns.add(
+          ReplacementPattern(
+            RegExp('https://${_escapeRegex(baseSnake)}\\.${_escapeRegex(orgTld)}/\\.well-known/'),
+            'https://{{project_name.paramCase()}}.{{org_tld}}/.well-known/',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp('https://${_escapeRegex(baseParam)}\\.${_escapeRegex(orgTld)}/\\.well-known/'),
+            'https://{{project_name.paramCase()}}.{{org_tld}}/.well-known/',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp('https://${_escapeRegex(baseDot)}\\.${_escapeRegex(orgTld)}/\\.well-known/'),
+            'https://{{project_name.paramCase()}}.{{org_tld}}/.well-known/',
+          ),
+        );
+      }
+
+      // database name 패턴 (_test → -test, _dev → -dev 등)
+      for (final suffix in [
+        '_test',
+        '_dev',
+        '_development',
+        '_staging',
+        '_prod',
+        '_production',
+      ]) {
+        final paramSuffix = suffix.replaceAll('_', '-');
+        patterns.add(
+          ReplacementPattern(
+            RegExp('name:\\s*${_escapeRegex(baseSnake)}$suffix\\b'),
+            'name: {{project_name.paramCase()}}$paramSuffix',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp('name:\\s*${_escapeRegex(baseParam)}$paramSuffix\\b'),
+            'name: {{project_name.paramCase()}}$paramSuffix',
+          ),
+        );
+      }
+
+      // 복합 이름 패턴 - Dart 모듈명 (snakeCase 유지)
+      for (final suffix in [
+        '_http_module',
+        '_service_module',
+        '_service',
+        '_module',
+      ]) {
+        patterns.add(
+          ReplacementPattern(
             RegExp('\\b${_escapeRegex(baseSnake)}$suffix\\b'),
             '{{project_name.snakeCase()}}$suffix',
           ),
         );
       }
 
-      // 경로 패턴: 슬래시(/)가 양쪽에 있으면 무조건 snakeCase 사용
-      // (suffix 패턴 다음, 점/하이픈 패턴보다 먼저 - 가장 구체적)
+      // 일반 경로 패턴: 슬래시(/)가 있는 경로는 기본적으로 snakeCase 사용
+      // (Dart/Flutter lib/, bin/, test/ 등의 표준 경로)
       // URL을 제외하기 위해 (?<!/) negative lookbehind 추가 (URL은 // 형태)
       patterns.addAll([
         // /projectName/ 패턴 (양쪽에 슬래시, URL의 // 제외)
@@ -403,6 +976,55 @@ class TemplateConverter {
           '{{project_name.paramCase()}}',
         ),
       ]);
+
+      // Serverpod 설정 파일의 호스트명 패턴 (dotCase보다 먼저!)
+      // publicHost: api-staging.blueprint. → publicHost: api-staging.{{project_name.paramCase()}}.
+      // host: database.private-staging.blueprint. → host: database.private-staging.{{project_name.paramCase()}}.
+      // publicHost: api.blueprint. → publicHost: api.{{project_name.paramCase()}}.
+      // # comment: database.blueprint.. → # comment: database.{{project_name.paramCase()}}..
+      for (final prefix in [
+        'api-staging',
+        'api-production',
+        'insights-staging',
+        'insights-production',
+        'app-staging',
+        'app-production',
+        'database.private-staging',
+        'database.private-production',
+        'redis.private-staging',
+        'redis.private-production',
+        'database-staging',
+        'database-production',
+        'redis-staging',
+        'redis-production',
+        'api',        // production: api.blueprint.
+        'insights',   // production: insights.blueprint.
+        'app',        // production: app.blueprint.
+        'database',   // comment example: database.blueprint..
+        'redis',      // comment example: redis.blueprint..
+      ]) {
+        // snake_case 호스트명
+        patterns.add(
+          ReplacementPattern(
+            RegExp('$prefix\\.${_escapeRegex(baseSnake)}\\.'),
+            '$prefix.{{project_name.paramCase()}}.',
+          ),
+        );
+        // param-case 호스트명
+        patterns.add(
+          ReplacementPattern(
+            RegExp('$prefix\\.${_escapeRegex(baseParam)}\\.'),
+            '$prefix.{{project_name.paramCase()}}.',
+          ),
+        );
+        // dot.case 호스트명
+        patterns.add(
+          ReplacementPattern(
+            RegExp('$prefix\\.${_escapeRegex(baseDot)}\\.'),
+            '$prefix.{{project_name.paramCase()}}.',
+          ),
+        );
+      }
 
       // 점(.) 패턴: dotCase 사용 (실제로 점이 포함된 경우만)
       // 주의: 양쪽에 점이 있거나 한쪽에 점이 있는 구체적인 경우만 매칭
@@ -609,14 +1231,120 @@ class TemplateConverter {
       // Mason 케이스 변환 함수에 맞춘 패턴 생성
       // 패턴 순서: 더 구체적인 패턴부터 일반적인 패턴 순서로
 
-      // 0. Title case 주석 패턴 (가장 먼저 처리 - PascalCase보다 우선)
-      // 주석 안에서 사용되는 경우를 먼저 매칭
-      // 주석 컨텍스트에서는 titleCase를 유지
-      // 특별히 "for ProjectName." 패턴을 먼저 매칭 (문서 주석에서 자주 사용)
+      // -1. URL 컨텍스트 패턴 (최우선 처리 - :// 포함된 URL에서는 무조건 paramCase)
+      // URL 스킴 (https://, http://, s3://, gs:// 등) 뒤에 오는 프로젝트명은 paramCase 사용
+      // 다양한 케이스 변형 모두 처리: Blueprint, blueprint, blueprint-xxx 등
+
+      // URL에서 PascalCase 프로젝트명 (예: https://blueprint-storage.s3.amazonaws.com)
+      patterns.add(
+        ReplacementPattern(
+          RegExp('(?<=://)([^/]*\\.)?${_escapeRegex(basePascal)}'),
+          '{{project_name.paramCase()}}',
+        ),
+      );
+
+      // URL에서 snake_case 프로젝트명 (예: https://blueprint_storage.s3.amazonaws.com)
+      patterns.add(
+        ReplacementPattern(
+          RegExp('(?<=://)([^/]*\\.)?${_escapeRegex(baseSnake)}'),
+          '{{project_name.paramCase()}}',
+        ),
+      );
+
+      // URL에서 param-case 프로젝트명 (예: https://blueprint-storage.s3.amazonaws.com)
+      patterns.add(
+        ReplacementPattern(
+          RegExp('(?<=://)([^/]*\\.)?${_escapeRegex(baseParam)}'),
+          '{{project_name.paramCase()}}',
+        ),
+      );
+
+      // URL에서 dot.case 프로젝트명 (예: https://blueprint.storage.s3.amazonaws.com)
+      patterns.add(
+        ReplacementPattern(
+          RegExp('(?<=://)([^/]*\\.)?${_escapeRegex(baseDot)}'),
+          '{{project_name.paramCase()}}',
+        ),
+      );
+
+      // 0. Title case 컨텍스트 패턴 (가장 먼저 처리 - PascalCase보다 우선)
+      // JSON/텍스트 파일에서 자연어 맥락으로 사용되는 경우를 먼저 매칭
+      // 구두점(마침표, 쉼표, 느낌표, 물음표, 세미콜론, 콜론) 뒤에 오는 경우 titleCase 유지
+
+      // Markdown 헤더 패턴 (# 뒤에 오는 프로젝트명은 titleCase로 표시)
+      // # project_name → # {{project_name.titleCase()}}
+      patterns.add(
+        ReplacementPattern(
+          RegExp('^#+ ${_escapeRegex(baseSnake)}', multiLine: true),
+          '# {{project_name.titleCase()}}',
+        ),
+      );
+      // # Project Name (이미 titleCase인 경우)
+      patterns.add(
+        ReplacementPattern(
+          RegExp('^#+ ${_escapeRegex(baseTitle)}', multiLine: true),
+          '# {{project_name.titleCase()}}',
+        ),
+      );
+
+      // 문장 끝 구두점 패턴 (., !, ?, ;, :)
+      for (final punctuation in ['.', '!', '?', ';', ':']) {
+        patterns.add(
+          ReplacementPattern(
+            RegExp('${_escapeRegex(baseTitle)}${_escapeRegex(punctuation)}'),
+            '{{project_name.titleCase()}}$punctuation',
+          ),
+        );
+      }
+
+      // 쉼표 뒤 공백 패턴
+      patterns.add(
+        ReplacementPattern(
+          RegExp('${_escapeRegex(baseTitle)}, '),
+          '{{project_name.titleCase()}}, ',
+        ),
+      );
+
+      // 따옴표로 감싸진 패턴 (JSON 문자열 값)
+      // "ProjectName" or 'ProjectName'
+      patterns.add(
+        ReplacementPattern(
+          RegExp('"${_escapeRegex(baseTitle)}"'),
+          '"{{project_name.titleCase()}}"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp("'${_escapeRegex(baseTitle)}'"),
+          "'{{project_name.titleCase()}}'",
+        ),
+      );
+
+      // JSON key-value 패턴: "key": "ProjectName"
+      patterns.add(
+        ReplacementPattern(
+          RegExp(': "${_escapeRegex(baseTitle)}"'),
+          ': "{{project_name.titleCase()}}"',
+        ),
+      );
+
+      // 문서 주석 특수 패턴들
       patterns.add(
         ReplacementPattern(
           RegExp('for ${_escapeRegex(baseTitle)}\\.'),
           'for {{project_name.titleCase()}}.',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('the ${_escapeRegex(baseTitle)}'),
+          'the {{project_name.titleCase()}}',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('of ${_escapeRegex(baseTitle)}'),
+          'of {{project_name.titleCase()}}',
         ),
       );
 
@@ -1277,19 +2005,19 @@ class TemplateConverter {
             RegExp(
               'app-staging\\.${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}\\b',
             ),
-            'app-staging.{{project_name.snakeCase()}}.{{org_tld}}',
+            'app-staging.{{project_name.paramCase()}}.{{org_tld}}',
           ),
           ReplacementPattern(
             RegExp(
               'app-development\\.${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}\\b',
             ),
-            'app-development.{{project_name.snakeCase()}}.{{org_tld}}',
+            'app-development.{{project_name.paramCase()}}.{{org_tld}}',
           ),
           ReplacementPattern(
             RegExp(
               '\\b${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}\\b',
             ),
-            '{{project_name.snakeCase()}}.{{org_tld}}',
+            '{{project_name.paramCase()}}.{{org_tld}}',
           ),
         ]);
       }
