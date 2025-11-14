@@ -13,3 +13,7 @@ coverage/
 
 # Android studio and IntelliJ
 .idea
+
+# Project configurations (user-specific, can be committed if desired)
+projects/*.json
+!projects/blueprint.json

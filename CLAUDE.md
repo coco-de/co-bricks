@@ -59,6 +59,58 @@ dart run bin/co_bricks.dart sync --type monorepo --project-dir template/good_tea
 dart run bin/co_bricks.dart sync --type app --project-dir template/good_teacher
 ```
 
+### Saving and Reusing Project Configurations
+
+**Save configuration during creation**:
+```bash
+dart run bin/co_bricks.dart create --type monorepo \
+  --name blueprint \
+  --project-shortcut bp \
+  --description "Blueprint project" \
+  --organization Cocode \
+  --save-config  # This saves the configuration to projects/blueprint.json
+```
+
+**List saved configurations**:
+```bash
+dart run bin/co_bricks.dart create-from-config --list
+```
+
+**Create from saved configuration**:
+```bash
+# Use saved configuration
+dart run bin/co_bricks.dart create-from-config --config blueprint
+
+# Override output directory
+dart run bin/co_bricks.dart create-from-config --config blueprint --output-dir ../new-location
+
+# Override auto-start setting
+dart run bin/co_bricks.dart create-from-config --config blueprint --auto-start
+```
+
+**Manual configuration editing**:
+Configurations are stored in `projects/` directory as JSON files. You can manually create or edit these files:
+
+```json
+{
+  "type": "monorepo",
+  "name": "blueprint",
+  "project_shortcut": "bp",
+  "description": "Blueprint - Cocode's service blueprint implementation",
+  "organization": "Cocode",
+  "tld": "im",
+  "org_tld": "im",
+  "github_org": "coco-de",
+  "github_repo": "blueprint",
+  "github_visibility": "private",
+  "backend": "serverpod",
+  "enable_admin": true,
+  "admin_email": "dev@cocode.im",
+  "output_dir": "..",
+  "auto_start": false
+}
+```
+
 ### Testing
 
 ```bash

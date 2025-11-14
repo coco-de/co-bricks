@@ -2,6 +2,8 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:args/command_runner.dart';
+import 'package:co_bricks/src/models/project_config.dart' as model;
+import 'package:co_bricks/src/services/project_config_service.dart';
 import 'package:mason/mason.dart' hide packageVersion;
 import 'package:mason_logger/mason_logger.dart';
 
@@ -131,6 +133,11 @@ class CreateCommand extends Command<int> {
         'auto-start',
         help: 'Automatically run "make start" after project creation',
         defaultsTo: false,
+      )
+      ..addFlag(
+        'save-config',
+        help: 'Save project configuration to projects/ directory for later reuse',
+        defaultsTo: false,
       );
   }
 
@@ -164,6 +171,40 @@ class CreateCommand extends Command<int> {
       // Collect variables
       final vars = await _collectVariables(interactive: interactive);
       final projectName = vars['project_name'] as String;
+
+      // Save configuration if requested
+      final saveConfig = argResults!['save-config'] as bool;
+      if (saveConfig) {
+        final config = model.SavedProjectConfig(
+          type: 'monorepo',
+          name: projectName,
+          description: vars['description'] as String,
+          organization: vars['org_name'] as String,
+          tld: vars['tld'] as String,
+          orgTld: vars['org_tld'] as String,
+          githubOrg: vars['github_org'] as String,
+          githubRepo: vars['github_repo'] as String,
+          githubVisibility: vars['github_visibility'] as String,
+          backend: vars['backend'] as String?,
+          enableAdmin: vars['enable_admin'] as bool? ?? false,
+          adminEmail: vars['admin_email'] as String?,
+          appleDeveloperId: vars['apple_developer_id'] as String?,
+          itcTeamId: vars['itc_team_id'] as String?,
+          teamId: vars['team_id'] as String?,
+          certCn: vars['cert_cn'] as String?,
+          certOu: vars['cert_ou'] as String?,
+          certO: vars['cert_o'] as String?,
+          certL: vars['cert_l'] as String?,
+          certSt: vars['cert_st'] as String?,
+          certC: vars['cert_c'] as String?,
+          randomProjectId: vars['random_project_id'] as String?,
+          outputDir: argResults!['output-dir'] as String,
+          autoStart: argResults!['auto-start'] as bool,
+        );
+
+        final configService = ProjectConfigService(logger: _logger);
+        await configService.saveConfig(config);
+      }
 
       // Create service and generate project
       final service = CreateMonorepoService(
@@ -241,6 +282,10 @@ class CreateCommand extends Command<int> {
       }
     }
     vars['project_name'] = projectName;
+
+    // Project shortcut (auto-generated from first 2 letters)
+    vars['project_shortcut'] =
+        projectName.substring(0, projectName.length.clamp(0, 2));
 
     // Description
     String? description = argResults!['description'] as String?;

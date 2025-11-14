@@ -38,7 +38,6 @@ create-blueprint:
 		--no-interactive \
 		--auto-start \
 		--name blueprint \
-		--project-shortcut bp \
 		--description "Blueprint - Cocode's service blueprint implementation" \
 		--organization Cocode \
 		--tld im \
