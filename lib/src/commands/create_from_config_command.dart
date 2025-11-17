@@ -109,6 +109,8 @@ class CreateFromConfigCommand extends Command<int> {
         'cert_st': config.certSt ?? 'Seoul',
         'cert_c': config.certC ?? 'KR',
         'randomprojectid': config.randomProjectId ?? _generateRandomId(),
+        'aws_access_key_id': config.awsAccessKeyId ?? '',
+        'aws_secret_access_key': config.awsSecretAccessKey ?? '',
       };
 
       // Create project based on type

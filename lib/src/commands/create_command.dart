@@ -122,6 +122,14 @@ class CreateCommand extends Command<int> {
         help: 'Enable admin functionality (true/false)',
         allowed: ['true', 'false'],
       )
+      ..addOption(
+        'aws-access-key-id',
+        help: 'AWS Access Key ID for S3, SNS, SQS services',
+      )
+      ..addOption(
+        'aws-secret-access-key',
+        help: 'AWS Secret Access Key for AWS services',
+      )
       ..addFlag(
         'interactive',
         abbr: 'i',
@@ -486,6 +494,27 @@ class CreateCommand extends Command<int> {
       );
     }
     vars['cert_c'] = certC ?? 'KR';
+
+    // AWS credentials
+    String? awsAccessKeyId = argResults!['aws-access-key-id'] as String?;
+    if (interactive && (awsAccessKeyId == null || awsAccessKeyId.isEmpty)) {
+      awsAccessKeyId = _logger.prompt(
+        'AWS Access Key ID:',
+        defaultValue: '',
+      );
+    }
+    vars['aws_access_key_id'] = awsAccessKeyId ?? '';
+
+    String? awsSecretAccessKey =
+        argResults!['aws-secret-access-key'] as String?;
+    if (interactive &&
+        (awsSecretAccessKey == null || awsSecretAccessKey.isEmpty)) {
+      awsSecretAccessKey = _logger.prompt(
+        'AWS Secret Access Key:',
+        defaultValue: '',
+      );
+    }
+    vars['aws_secret_access_key'] = awsSecretAccessKey ?? '';
 
     return vars;
   }

@@ -1293,17 +1293,40 @@ class SyncMonorepoService {
   /// - shared/dependencies/pubspec.yaml: 조건부 템플릿으로 변환
   /// - feature/*/pubspec.yaml: 서비스 의존성 제거 (dependencies 패키지에서 export되므로)
   String _convertPubspecDependencies(String content, String filePath) {
-    // 이미 조건부 템플릿이 포함되어 있으면 변환하지 않음
-    if (content.contains('{{#has_openapi}}') ||
+    var result = content;
+
+    // 이미 조건부 템플릿이 포함되어 있으면 변환하지 않지만, 공백은 정규화
+    final hasConditionals = content.contains('{{#has_openapi}}') ||
         content.contains('{{#has_serverpod}}') ||
         content.contains('{{#has_graphql}}') ||
         content.contains('{{#has_supabase}}') ||
         content.contains('{{#has_firebase}}') ||
-        content.contains('{{#enable_admin}}')) {
-      return content;
-    }
+        content.contains('{{#enable_admin}}');
 
-    var result = content;
+    if (hasConditionals) {
+      // 조건부 템플릿이 있는 경우: 공백만 정규화하고 반환
+      logger.detail('Normalizing whitespace in existing conditional templates...');
+
+      // dependencies: 섹션 내의 과도한 공백 제거
+      final pattern1 = RegExp(r'(resources:\s*\^[0-9.]+)\s*\n\s*\n\s*\n(\s+\{\{#has_)');
+      if (pattern1.hasMatch(result)) {
+        result = result.replaceAllMapped(
+          pattern1,
+          (match) => '${match.group(1)}\n${match.group(2)}',
+        );
+      }
+
+      // 조건부 템플릿 직전의 공백 라인 완전히 제거
+      final pattern3 = RegExp(r'\n\s*\n(\s+\{\{#has_)');
+      if (pattern3.hasMatch(result)) {
+        result = result.replaceAllMapped(
+          pattern3,
+          (match) => '\n${match.group(1)}',
+        );
+      }
+
+      return result;
+    }
 
     // 여러 줄 공백을 2줄로 정규화 (조건부 템플릿 추가 전)
     result = result.replaceAll(RegExp(r'\n\n\n+'), '\n\n');
@@ -1380,6 +1403,35 @@ class SyncMonorepoService {
           return '$indent{{#$conditionalFlag}}$dependencyLine{{/$conditionalFlag}}';
         });
       }
+    }
+
+    // 조건부 템플릿 추가 후 공백 정규화
+    logger.detail('Normalizing whitespace in pubspec dependencies...');
+
+    // 1. dependencies: 섹션 내의 과도한 공백 제거
+    // "resources: ^0.1.0\n\n\n  {{#has_openapi}}" -> "resources: ^0.1.0\n  {{#has_openapi}}"
+    final pattern1 = RegExp(r'(resources:\s*\^[0-9.]+)\s*\n\s*\n\s*\n(\s+\{\{#has_)');
+    if (pattern1.hasMatch(result)) {
+      logger.detail('Found resources pattern with excessive whitespace');
+      result = result.replaceAllMapped(
+        pattern1,
+        (match) => '${match.group(1)}\n${match.group(2)}',
+      );
+      logger.detail('Removed excessive whitespace after resources');
+    }
+
+    // 2. 3줄 이상 연속 공백을 2줄로 정규화
+    result = result.replaceAll(RegExp(r'\n\s*\n\s*\n+'), '\n\n');
+
+    // 3. 조건부 템플릿 직전의 공백 라인 완전히 제거 (dependencies 섹션)
+    final pattern3 = RegExp(r'\n\s*\n(\s+\{\{#has_)');
+    if (pattern3.hasMatch(result)) {
+      logger.detail('Found whitespace before conditional templates');
+      result = result.replaceAllMapped(
+        pattern3,
+        (match) => '\n${match.group(1)}',
+      );
+      logger.detail('Removed whitespace before conditional templates');
     }
 
     return result;
@@ -2432,7 +2484,50 @@ class SyncMonorepoService {
       result.add(line);
     }
 
-    return result.join('\n');
+    var finalResult = result.join('\n');
+
+    // 조건부 템플릿 앞의 과도한 공백 제거
+    // "  \n  \n  \n  {{#has_serverpod}}" -> "  \n  {{#has_serverpod}}"
+    finalResult = finalResult.replaceAllMapped(
+      RegExp(r'\n\s*\n\s*\n+(\s+\{\{#)'),
+      (match) => '\n${match.group(1)}',
+    );
+
+    // 조건부 템플릿 직전의 공백 라인 제거 (2줄 이상의 공백을 1줄로)
+    finalResult = finalResult.replaceAllMapped(
+      RegExp(r'\n\s*\n(\s+\{\{#)'),
+      (match) => '\n${match.group(1)}',
+    );
+
+    // workspace 항목 다음의 공백 라인 제거 (조건부 태그 전)
+    // "  - item\n  \n{{#" -> "  - item\n{{#"
+    finalResult = finalResult.replaceAllMapped(
+      RegExp(r'(\n\s+-.+)\n\s*\n(\{\{#)'),
+      (match) => '${match.group(1)}\n${match.group(2)}',
+    );
+
+    // workspace 항목 다음의 공백 라인 제거 (조건부 종료 태그 전)
+    // "  - item\n  \n{{/" -> "  - item\n{{/"
+    finalResult = finalResult.replaceAllMapped(
+      RegExp(r'(\n\s+-.+)\n\s*\n(\{\{/)'),
+      (match) => '${match.group(1)}\n${match.group(2)}',
+    );
+
+    // 조건부 템플릿 종료 태그 다음의 공백 라인 제거 (workspace 항목 전)
+    // "{{/enable_admin}}\n  \n  -" -> "{{/enable_admin}}\n  -"
+    finalResult = finalResult.replaceAllMapped(
+      RegExp(r'(\{\{/[^}]+\}\})\n\s*\n(\s+-)'),
+      (match) => '${match.group(1)}\n${match.group(2)}',
+    );
+
+    // 조건부 템플릿 종료 태그 다음의 공백 라인 제거 (다음 조건부 태그 전)
+    // "{{/has_serverpod}}\n  \n  -" -> "{{/has_serverpod}}\n  -"
+    finalResult = finalResult.replaceAllMapped(
+      RegExp(r'(\{\{/[^}]+\}\})\n\s*\n(\s*)'),
+      (match) => '${match.group(1)}\n${match.group(2)}',
+    );
+
+    return finalResult;
   }
 
   /// dependencies 섹션에 조건부 백엔드 패키지 태그 추가 (인라인 형식)

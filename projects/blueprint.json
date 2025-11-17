@@ -20,6 +20,8 @@
   "cert_l": "Seoul",
   "cert_st": "Mapo",
   "cert_c": "KR",
+  "aws_access_key_id": "",
+  "aws_secret_access_key": "",
   "output_dir": "..",
   "auto_start": false
 }
