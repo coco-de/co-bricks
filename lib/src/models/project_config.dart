@@ -26,6 +26,7 @@ class SavedProjectConfig {
     this.certSt,
     this.certC,
     this.randomProjectId,
+    this.randomAwsId,
     this.awsAccessKeyId,
     this.awsSecretAccessKey,
     this.outputDir,
@@ -57,6 +58,7 @@ class SavedProjectConfig {
       certSt: json['cert_st'] as String?,
       certC: json['cert_c'] as String?,
       randomProjectId: json['random_project_id'] as String?,
+      randomAwsId: json['random_aws_id'] as String?,
       awsAccessKeyId: json['aws_access_key_id'] as String?,
       awsSecretAccessKey: json['aws_secret_access_key'] as String?,
       outputDir: json['output_dir'] as String?,
@@ -136,6 +138,9 @@ class SavedProjectConfig {
   /// Random project ID
   final String? randomProjectId;
 
+  /// Random AWS resource ID (7-digit number for unique resource naming)
+  final String? randomAwsId;
+
   /// AWS Access Key ID
   final String? awsAccessKeyId;
 
@@ -173,6 +178,7 @@ class SavedProjectConfig {
       if (certSt != null) 'cert_st': certSt,
       if (certC != null) 'cert_c': certC,
       if (randomProjectId != null) 'random_project_id': randomProjectId,
+      if (randomAwsId != null) 'random_aws_id': randomAwsId,
       if (awsAccessKeyId != null) 'aws_access_key_id': awsAccessKeyId,
       if (awsSecretAccessKey != null) 'aws_secret_access_key': awsSecretAccessKey,
       if (outputDir != null) 'output_dir': outputDir,

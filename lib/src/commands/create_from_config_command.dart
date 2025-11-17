@@ -17,8 +17,8 @@ class CreateFromConfigCommand extends Command<int> {
   CreateFromConfigCommand({
     required Logger logger,
     required MasonGenerator? generator,
-  })  : _logger = logger,
-        _generator = generator {
+  }) : _logger = logger,
+       _generator = generator {
     argParser
       ..addOption(
         'config',
@@ -28,7 +28,8 @@ class CreateFromConfigCommand extends Command<int> {
       ..addOption(
         'output-dir',
         abbr: 'o',
-        help: 'Output directory for the generated project (overrides saved value)',
+        help:
+            'Output directory for the generated project (overrides saved value)',
       )
       ..addFlag(
         'list',
@@ -42,8 +43,7 @@ class CreateFromConfigCommand extends Command<int> {
   }
 
   @override
-  String get description =>
-      'Create projects from saved JSON configurations.';
+  String get description => 'Create projects from saved JSON configurations.';
 
   @override
   String get name => 'create-from-config';
@@ -81,8 +81,6 @@ class CreateFromConfigCommand extends Command<int> {
       final backend = config.backend ?? 'serverpod';
       final vars = <String, dynamic>{
         'project_name': config.name,
-        'project_shortcut':
-            config.name.substring(0, config.name.length.clamp(0, 2)),
         'description': config.description,
         'org_name': config.organization,
         'tld': config.tld,
@@ -109,6 +107,7 @@ class CreateFromConfigCommand extends Command<int> {
         'cert_st': config.certSt ?? 'Seoul',
         'cert_c': config.certC ?? 'KR',
         'randomprojectid': config.randomProjectId ?? _generateRandomId(),
+        'randomawsid': config.randomAwsId ?? _generateRandomAwsId(),
         'aws_access_key_id': config.awsAccessKeyId ?? '',
         'aws_secret_access_key': config.awsSecretAccessKey ?? '',
       };
@@ -139,7 +138,9 @@ class CreateFromConfigCommand extends Command<int> {
 
       if (configs.isEmpty) {
         _logger.info('No saved configurations found.');
-        _logger.info('Create a configuration with: co-bricks create --save-config');
+        _logger.info(
+          'Create a configuration with: co-bricks create --save-config',
+        );
         return ExitCode.success.code;
       }
 
@@ -169,9 +170,8 @@ class CreateFromConfigCommand extends Command<int> {
       );
 
       // Use output-dir from args if provided, otherwise use config value
-      final outputDir = argResults!['output-dir'] as String? ??
-          config.outputDir ??
-          '.';
+      final outputDir =
+          argResults!['output-dir'] as String? ?? config.outputDir ?? '.';
 
       _logger.info('🎨 Creating project: ${config.name}...');
 
@@ -186,7 +186,9 @@ class CreateFromConfigCommand extends Command<int> {
           : config.autoStart;
 
       if (autoStart) {
-        final projectPath = Directory('$outputDir/${config.name}').absolute.path;
+        final projectPath = Directory(
+          '$outputDir/${config.name}',
+        ).absolute.path;
         _logger
           ..info('')
           ..info('🚀 Running "make start" in $projectPath...');
@@ -234,5 +236,11 @@ class CreateFromConfigCommand extends Command<int> {
         (_) => chars.codeUnitAt(random.nextInt(chars.length)),
       ),
     );
+  }
+
+  /// Generates a random 7-digit AWS ID for unique resource naming
+  String _generateRandomAwsId() {
+    final random = Random();
+    return random.nextInt(10000000).toString();
   }
 }
