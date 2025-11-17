@@ -1305,6 +1305,9 @@ class SyncMonorepoService {
 
     var result = content;
 
+    // 여러 줄 공백을 2줄로 정규화 (조건부 템플릿 추가 전)
+    result = result.replaceAll(RegExp(r'\n\n\n+'), '\n\n');
+
     // 각 서비스별 의존성
     final servicePatterns = {
       'openapi_service': 'has_openapi',
@@ -2265,12 +2268,10 @@ class SyncMonorepoService {
 
         // resources 패키지 처리 - 다음 라인에 백엔드 서비스 패키지들 추가
         if (line.contains('package/resources')) {
-          result.add('  - package/resources{{#has_serverpod}}');
-          result.add(
-            '  - package/serverpod_service{{/has_serverpod}}{{#has_openapi}}',
-          );
-          result.add('  - package/openapi_service');
-          result.add('  - package/openapi{{/has_openapi}}');
+          result.add('  - package/resources');
+          result.add('  {{#has_serverpod}}- package/serverpod_service{{/has_serverpod}}');
+          result.add('  {{#has_openapi}}- package/openapi_service{{/has_openapi}}');
+          result.add('  {{#has_openapi}}- package/openapi{{/has_openapi}}');
           continue;
         }
 
@@ -2398,8 +2399,17 @@ class SyncMonorepoService {
         }
       }
 
-      // ignore 목록 항목 추적
+      // ignore 목록 항목 추적 및 정적 backend 서비스 항목 필터링
       if (inBuildSelectIgnore && trimmed.startsWith('-')) {
+        // 정적 backend 서비스 항목 제거 (조건부로 추가될 것이므로)
+        if (trimmed.contains('"serverpod_service"') ||
+            trimmed.contains('"openapi_service"') ||
+            trimmed.contains('"openapi"') ||
+            trimmed.contains('"graphql_service"') ||
+            trimmed.contains('"supabase_service"') ||
+            trimmed.contains('"firebase_service"')) {
+          continue; // 정적 항목은 건너뛰고 조건부로만 추가
+        }
         lastIgnoreLineIndex = result.length;
       }
 
