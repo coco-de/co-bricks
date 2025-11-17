@@ -5,13 +5,13 @@ import 'package:path/path.dart' as path;
 /// 파일 시스템 유틸리티
 class FileUtils {
   /// 제외할 디렉토리 목록 (정확한 이름 매칭)
+  /// Note: .github는 sync_monorepo_service에서 명시적으로 관리하므로 여기서 제외하지 않음
   static const excludedDirs = [
     '.dart_tool',
     'build',
     'node_modules',
     'Pods',
     '.git',
-    '.github', // GitHub Actions workflows 등 제외
   ];
 
   /// 제외할 파일 패턴 (파일명 기반)
@@ -389,10 +389,20 @@ class FileUtils {
     }
   }
 
-  /// 파일이 텍스트 파일인지 확인
+  /// 파일이 텍스트 파일인지 확인 (확장자 기반 최적화)
   static Future<bool> isTextFile(File file) async {
+    final fileName = path.basename(file.path);
+    final extension = path.extension(fileName).toLowerCase();
+
+    // 확장자나 파일명으로 빠르게 판별 (I/O 없음)
+    if (_processableExtensions.contains(extension) ||
+        _specialFiles.contains(fileName)) {
+      return true;
+    }
+
+    // 확장자가 없거나 알 수 없는 경우만 바이트 체크 (fallback)
     try {
-      final bytes = await file.openRead(0, 1024).first;
+      final bytes = await file.openRead(0, 512).first; // 512 bytes로 축소
       // NULL 바이트가 있으면 바이너리
       return !bytes.contains(0);
     } catch (_) {

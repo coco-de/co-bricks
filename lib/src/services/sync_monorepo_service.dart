@@ -43,6 +43,26 @@ class SyncMonorepoService {
 
   final Logger logger;
 
+  /// 패턴 캐시 (성능 최적화)
+  List<ReplacementPattern>? _patternCache;
+  ProjectConfig? _lastConfig;
+
+  /// 패턴 가져오기 (캐시 사용)
+  List<ReplacementPattern> _getPatterns(ProjectConfig config) {
+    // 설정이 동일하면 캐시된 패턴 반환
+    if (_lastConfig == config && _patternCache != null) {
+      return _patternCache!;
+    }
+
+    // 새 패턴 생성 및 캐시
+    logger.detail('Building template patterns...');
+    _lastConfig = config;
+    _patternCache = TemplateConverter.buildPatterns(config);
+    logger.detail('Cached ${_patternCache!.length} patterns');
+
+    return _patternCache!;
+  }
+
   /// Monorepo 동기화 실행
   Future<void> sync(ProjectConfig config, Directory? projectDir) async {
     final rootDir = projectDir ?? Directory.current;
@@ -234,18 +254,21 @@ class SyncMonorepoService {
 
     // passwords.yaml 파일 백업
     final passwordsBackup = <String, List<int>>{};
-    final serverDirPattern =
-        RegExp(r'^{{project_name\.snakeCase\(\)}}_server$');
+    final serverDirPattern = RegExp(
+      r'^{{project_name\.snakeCase\(\)}}_server$',
+    );
     for (final entity in targetDir.listSync(recursive: false)) {
       if (entity is Directory) {
         final dirName = path.basename(entity.path);
         if (serverDirPattern.hasMatch(dirName)) {
-          final passwordsPath =
-              path.join(entity.path, 'config', 'passwords.yaml');
+          final passwordsPath = path.join(
+            entity.path,
+            'config',
+            'passwords.yaml',
+          );
           final passwordsFile = File(passwordsPath);
           if (passwordsFile.existsSync()) {
-            passwordsBackup[passwordsPath] =
-                await passwordsFile.readAsBytes();
+            passwordsBackup[passwordsPath] = await passwordsFile.readAsBytes();
           }
         }
       }
@@ -299,7 +322,7 @@ class SyncMonorepoService {
     // 템플릿 변환
     logger.info('   🔄 Converting to template variables...');
 
-    final patterns = TemplateConverter.buildPatterns(config);
+    final patterns = _getPatterns(config);
     var convertedFiles = 0;
 
     // 파일 처리 (디렉토리 이름은 이미 변환됨)
@@ -382,7 +405,7 @@ class SyncMonorepoService {
         // 템플릿 변환
         logger.info('   🔄 Converting to template variables...');
 
-        final patterns = TemplateConverter.buildPatterns(config);
+        final patterns = _getPatterns(config);
         var convertedFiles = 0;
 
         // 디렉토리 이름 변환
@@ -410,8 +433,7 @@ class SyncMonorepoService {
     // shared 디렉토리의 경우, dependencies/pubspec.yaml 조건부 라인 백업
     List<String>? pubspecConditionalLines;
     if (dirName == 'shared') {
-      pubspecConditionalLines =
-          await _backupPubspecConditionalLines(targetDir);
+      pubspecConditionalLines = await _backupPubspecConditionalLines(targetDir);
     }
 
     // Mason 조건부 파일 구조 스캔 및 백업
@@ -568,7 +590,7 @@ class SyncMonorepoService {
     // 템플릿 변환
     logger.info('   🔄 Converting to template variables...');
 
-    final patterns = TemplateConverter.buildPatterns(config);
+    final patterns = _getPatterns(config);
     var convertedFiles = 0;
     var renamedDirs = 0;
 
@@ -939,7 +961,7 @@ class SyncMonorepoService {
     }
   }
 
-  /// 파일 처리
+  /// 파일 처리 (병렬 처리 최적화)
   Future<Map<String, int>> _processFiles(
     Directory dir,
     ProjectConfig config,
@@ -947,186 +969,230 @@ class SyncMonorepoService {
   ) async {
     var convertedFiles = 0;
 
+    // 모든 파일 수집
+    final files = <File>[];
     await for (final entity in dir.list(recursive: true)) {
       if (entity is File) {
-        final originalFileName = path.basename(entity.path);
-
-        // Flutter LLDB 관련 파일 제외 (widgetbook의 ephemeral 디렉토리)
-        if (entity.path.contains('ios/Flutter/ephemeral') &&
-            (originalFileName == 'flutter_lldb_helper.py' ||
-             originalFileName == 'flutter_lldbinit')) {
-          continue;
-        }
-
-        // 이미 조건부 템플릿이 포함된 파일명인지 확인
-        final hasConditionalTemplate =
-            originalFileName.contains('{{#') &&
-            originalFileName.contains('{{/');
-
-        // 조건부 템플릿이 포함된 파일명에서 실제 파일명 추출
-        String actualFileName = originalFileName;
-        if (hasConditionalTemplate) {
-          // {{#has_openapi}}...{{/has_openapi}} 패턴에서 실제 파일명 추출
-          final match = RegExp(
-            r'\{\{#\w+\}\}(.+?)\{\{/\w+\}\}',
-          ).firstMatch(originalFileName);
-          if (match != null) {
-            actualFileName = match.group(1)!;
-          }
-        }
-
-        // 파일명 변환
-        var newFileName = FileUtils.convertFileName(
-          actualFileName,
-          config.projectNames,
-        );
-
-        // 네트워크별 mixin 파일명을 조건부 템플릿으로 변환
-        // {{#has_openapi}}community_openapi_mixin.dart{{ 디렉토리를 만들고 그 안에 has_openapi}} 파일 생성
-        String? conditionalDir;
-        String finalFileName = newFileName;
-
-        if (newFileName.endsWith('_openapi_mixin.dart') &&
-            !newFileName.contains('{{#has_openapi}}')) {
-          conditionalDir = '{{#has_openapi}}$newFileName{{';
-          finalFileName = 'has_openapi}}';
-        } else if (newFileName.endsWith('_serverpod_mixin.dart') &&
-            !newFileName.contains('{{#has_serverpod}}')) {
-          conditionalDir = '{{#has_serverpod}}$newFileName{{';
-          finalFileName = 'has_serverpod}}';
-        } else if (newFileName.endsWith('_graphql_mixin.dart') &&
-            !newFileName.contains('{{#has_graphql}}')) {
-          conditionalDir = '{{#has_graphql}}$newFileName{{';
-          finalFileName = 'has_graphql}}';
-        } else if (newFileName.endsWith('_supabase_mixin.dart') &&
-            !newFileName.contains('{{#has_supabase}}')) {
-          conditionalDir = '{{#has_supabase}}$newFileName{{';
-          finalFileName = 'has_supabase}}';
-        } else if (newFileName.endsWith('_firebase_mixin.dart') &&
-            !newFileName.contains('{{#has_firebase}}')) {
-          conditionalDir = '{{#has_firebase}}$newFileName{{';
-          finalFileName = 'has_firebase}}';
-        } else if (newFileName == 'console_service_locator.dart' &&
-            !newFileName.contains('{{#enable_admin}}')) {
-          conditionalDir = '{{#enable_admin}}$newFileName{{';
-          finalFileName = 'enable_admin}}';
-        }
-
-        // conditionalDir에 실제 파일명이 들어가도록 문자열 보간 적용
-        if (conditionalDir != null) {
-          conditionalDir = conditionalDir.replaceAll(
-            '\$newFileName',
-            newFileName,
-          );
-        }
-
-        // 파일 내용 변환 (파일 이동 전에 수행)
-        File? targetFile;
-        String? convertedContent;
-
-        if (FileUtils.shouldProcessFile(entity)) {
-          if (await FileUtils.isTextFile(entity) &&
-              await FileUtils.isFileSizeValid(entity)) {
-            try {
-              final originalContent = await entity.readAsString();
-              var content = originalContent;
-              final basename = path.basename(entity.path);
-
-              // mixins.dart 파일의 export 문을 조건부 템플릿으로 변환
-              if (basename == 'mixins.dart') {
-                content = _convertMixinsExports(content);
-              }
-
-              // dependencies.dart 파일의 openapi_service export 문을 조건부 템플릿으로 변환
-              if (basename == 'dependencies.dart') {
-                content = _convertDependenciesExports(content);
-              }
-
-              // pubspec.yaml 파일의 openapi_service 의존성을 조건부 템플릿으로 변환
-              if (basename == 'pubspec.yaml') {
-                content = _convertPubspecDependencies(content, entity.path);
-              }
-
-              // Repository 파일의 mixin/서비스 사용 패턴을 조건부 템플릿으로 변환
-              // 생성자 변환을 먼저 실행해야 개별 파라미터 변환과 충돌하지 않음
-              if (basename.endsWith('_repository.dart')) {
-                content = _convertRepositoryPatterns(content);
-              }
-
-              convertedContent = TemplateConverter.convertContent(
-                content,
-                patterns,
-              );
-            } catch (e) {
-              logger.warn('   ⚠️  Error converting file ${entity.path}: $e');
-            }
-          }
-        }
-
-        // 파일명이 변경되었거나 조건부 디렉토리가 필요한 경우
-        if (conditionalDir != null || newFileName != originalFileName) {
-          try {
-            final baseDir = path.dirname(entity.path);
-            final targetPath = conditionalDir != null
-                ? path.join(baseDir, conditionalDir, finalFileName)
-                : path.join(baseDir, finalFileName);
-
-            targetFile = File(targetPath);
-
-            // 조건부 템플릿 디렉토리 생성
-            if (conditionalDir != null) {
-              final conditionalDirPath = Directory(
-                path.join(baseDir, conditionalDir),
-              );
-              if (!conditionalDirPath.existsSync()) {
-                await conditionalDirPath.create(recursive: true);
-              }
-            }
-
-            // 일반 디렉토리도 생성 (필요한 경우)
-            final targetDir = Directory(path.dirname(targetPath));
-            if (!targetDir.existsSync()) {
-              await targetDir.create(recursive: true);
-            }
-
-            // 변환된 내용이 있으면 새 파일에 저장, 없으면 원본 파일 복사
-            if (convertedContent != null) {
-              if (targetFile.existsSync()) {
-                await targetFile.delete();
-              }
-              await targetFile.writeAsString(convertedContent);
-              await entity.delete();
-              convertedFiles++;
-            } else {
-              // 파일 복사 후 원본 삭제
-              if (targetFile.existsSync()) {
-                await targetFile.delete();
-              }
-              await entity.copy(targetFile.path);
-              await entity.delete();
-            }
-          } catch (e) {
-            // 파일명 변경 실패 시 무시
-            logger.warn('   ⚠️  Could not rename file $originalFileName: $e');
-          }
-        } else if (convertedContent != null) {
-          // 파일명은 변경되지 않았지만 내용이 변환된 경우
-          try {
-            final originalContent = await entity.readAsString();
-            if (convertedContent != originalContent) {
-              await entity.writeAsString(convertedContent);
-              convertedFiles++;
-            }
-          } catch (e) {
-            logger.warn(
-              '   ⚠️  Error writing converted content to ${entity.path}: $e',
-            );
-          }
-        }
+        files.add(entity);
       }
     }
 
+    // 배치로 병렬 처리 (batch size: 50)
+    const batchSize = 50;
+    for (var i = 0; i < files.length; i += batchSize) {
+      final end = (i + batchSize < files.length) ? i + batchSize : files.length;
+      final batch = files.sublist(i, end);
+
+      // 배치 내 파일들을 병렬로 처리
+      final results = await Future.wait(
+        batch.map(
+          (entity) => _processSingleFile(entity, config, patterns),
+        ),
+        eagerError: false,
+      );
+
+      // 변환된 파일 수 집계
+      convertedFiles += results.where((r) => r).length;
+    }
+
     return {'converted': convertedFiles};
+  }
+
+  /// 단일 파일 처리 (병렬 처리용)
+  Future<bool> _processSingleFile(
+    File entity,
+    ProjectConfig config,
+    List<ReplacementPattern> patterns,
+  ) async {
+    try {
+      final originalFileName = path.basename(entity.path);
+
+      // Flutter LLDB 관련 파일 제외 (widgetbook의 ephemeral 디렉토리)
+      if (entity.path.contains('ios/Flutter/ephemeral') &&
+          (originalFileName == 'flutter_lldb_helper.py' ||
+              originalFileName == 'flutter_lldbinit')) {
+        return false;
+      }
+
+      // 이미 조건부 템플릿이 포함된 파일명인지 확인
+      final hasConditionalTemplate =
+          originalFileName.contains('{{#') && originalFileName.contains('{{/');
+
+      // 조건부 템플릿이 포함된 파일명에서 실제 파일명 추출
+      String actualFileName = originalFileName;
+      if (hasConditionalTemplate) {
+        // {{#has_openapi}}...{{/has_openapi}} 패턴에서 실제 파일명 추출
+        final match = RegExp(
+          r'\{\{#\w+\}\}(.+?)\{\{/\w+\}\}',
+        ).firstMatch(originalFileName);
+        if (match != null) {
+          actualFileName = match.group(1)!;
+        }
+      }
+
+      // 파일명 변환
+      var newFileName = FileUtils.convertFileName(
+        actualFileName,
+        config.projectNames,
+      );
+
+      // 네트워크별 mixin 파일명을 조건부 템플릿으로 변환
+      // {{#has_openapi}}community_openapi_mixin.dart{{ 디렉토리를 만들고 그 안에 has_openapi}} 파일 생성
+      String? conditionalDir;
+      String finalFileName = newFileName;
+
+      if (newFileName.endsWith('_openapi_mixin.dart') &&
+          !newFileName.contains('{{#has_openapi}}')) {
+        conditionalDir = '{{#has_openapi}}$newFileName{{';
+        finalFileName = 'has_openapi}}';
+      } else if (newFileName.endsWith('_serverpod_mixin.dart') &&
+          !newFileName.contains('{{#has_serverpod}}')) {
+        conditionalDir = '{{#has_serverpod}}$newFileName{{';
+        finalFileName = 'has_serverpod}}';
+      } else if (newFileName.endsWith('_graphql_mixin.dart') &&
+          !newFileName.contains('{{#has_graphql}}')) {
+        conditionalDir = '{{#has_graphql}}$newFileName{{';
+        finalFileName = 'has_graphql}}';
+      } else if (newFileName.endsWith('_supabase_mixin.dart') &&
+          !newFileName.contains('{{#has_supabase}}')) {
+        conditionalDir = '{{#has_supabase}}$newFileName{{';
+        finalFileName = 'has_supabase}}';
+      } else if (newFileName.endsWith('_firebase_mixin.dart') &&
+          !newFileName.contains('{{#has_firebase}}')) {
+        conditionalDir = '{{#has_firebase}}$newFileName{{';
+        finalFileName = 'has_firebase}}';
+      } else if (newFileName == 'console_service_locator.dart' &&
+          !newFileName.contains('{{#enable_admin}}')) {
+        conditionalDir = '{{#enable_admin}}$newFileName{{';
+        finalFileName = 'enable_admin}}';
+      }
+
+      // conditionalDir에 실제 파일명이 들어가도록 문자열 보간 적용
+      if (conditionalDir != null) {
+        conditionalDir = conditionalDir.replaceAll(
+          '\$newFileName',
+          newFileName,
+        );
+      }
+
+      // 파일 내용 변환 (파일 이동 전에 수행)
+      File? targetFile;
+      String? convertedContent;
+
+      if (FileUtils.shouldProcessFile(entity)) {
+        if (await FileUtils.isTextFile(entity) &&
+            await FileUtils.isFileSizeValid(entity)) {
+          try {
+            final originalContent = await entity.readAsString();
+            var content = originalContent;
+            final basename = path.basename(entity.path);
+
+            // mixins.dart 파일의 export 문을 조건부 템플릿으로 변환
+            if (basename == 'mixins.dart') {
+              content = _convertMixinsExports(content);
+            }
+
+            // dependencies.dart 파일의 openapi_service export 문을 조건부 템플릿으로 변환
+            if (basename == 'dependencies.dart') {
+              content = _convertDependenciesExports(content);
+            }
+
+            // pubspec.yaml 파일의 openapi_service 의존성을 조건부 템플릿으로 변환
+            if (basename == 'pubspec.yaml') {
+              content = _convertPubspecDependencies(content, entity.path);
+            }
+
+            // Repository 파일의 mixin/서비스 사용 패턴을 조건부 템플릿으로 변환
+            // 생성자 변환을 먼저 실행해야 개별 파라미터 변환과 충돌하지 않음
+            if (basename.endsWith('_repository.dart')) {
+              content = _convertRepositoryPatterns(content);
+            }
+
+            // GitHub Actions 파일의 ${{ }}를 이스케이프 처리
+            // Mason 템플릿 변수와 충돌을 피하기 위해 ${{ -> ${ {, }} -> } }로 변환
+            if (entity.path.contains('.github') &&
+                (basename.endsWith('.yml') || basename.endsWith('.yaml'))) {
+              content = content
+                  .replaceAll(r'${{', r'${ { ')
+                  .replaceAll('}}', ' } }');
+            }
+
+            convertedContent = TemplateConverter.convertContent(
+              content,
+              patterns,
+            );
+          } catch (e) {
+            logger.warn('   ⚠️  Error converting file ${entity.path}: $e');
+          }
+        }
+      }
+
+      // 파일명이 변경되었거나 조건부 디렉토리가 필요한 경우
+      if (conditionalDir != null || newFileName != originalFileName) {
+        try {
+          final baseDir = path.dirname(entity.path);
+          final targetPath = conditionalDir != null
+              ? path.join(baseDir, conditionalDir, finalFileName)
+              : path.join(baseDir, finalFileName);
+
+          targetFile = File(targetPath);
+
+          // 조건부 템플릿 디렉토리 생성
+          if (conditionalDir != null) {
+            final conditionalDirPath = Directory(
+              path.join(baseDir, conditionalDir),
+            );
+            if (!conditionalDirPath.existsSync()) {
+              await conditionalDirPath.create(recursive: true);
+            }
+          }
+
+          // 일반 디렉토리도 생성 (필요한 경우)
+          final targetDir = Directory(path.dirname(targetPath));
+          if (!targetDir.existsSync()) {
+            await targetDir.create(recursive: true);
+          }
+
+          // 변환된 내용이 있으면 새 파일에 저장, 없으면 원본 파일 복사
+          if (convertedContent != null) {
+            if (targetFile.existsSync()) {
+              await targetFile.delete();
+            }
+            await targetFile.writeAsString(convertedContent);
+            await entity.delete();
+            return true;
+          } else {
+            // 파일 복사 후 원본 삭제
+            if (targetFile.existsSync()) {
+              await targetFile.delete();
+            }
+            await entity.copy(targetFile.path);
+            await entity.delete();
+          }
+        } catch (e) {
+          // 파일명 변경 실패 시 무시
+          logger.warn('   ⚠️  Could not rename file $originalFileName: $e');
+        }
+      } else if (convertedContent != null) {
+        // 파일명은 변경되지 않았지만 내용이 변환된 경우
+        try {
+          final originalContent = await entity.readAsString();
+          if (convertedContent != originalContent) {
+            await entity.writeAsString(convertedContent);
+            return true;
+          }
+        } catch (e) {
+          logger.warn(
+            '   ⚠️  Error writing converted content to ${entity.path}: $e',
+          );
+        }
+      }
+
+      return false; // 파일이 변환되지 않음
+    } catch (e) {
+      logger.warn('   ⚠️  Error processing file ${entity.path}: $e');
+      return false;
+    }
   }
 
   /// mixins.dart 파일의 export 문을 조건부 템플릿으로 변환
@@ -1262,7 +1328,8 @@ class SyncMonorepoService {
         );
 
     // package/core/pubspec.yaml인지 확인
-    final isCorePubspec = filePath.contains('package/core/pubspec.yaml') ||
+    final isCorePubspec =
+        filePath.contains('package/core/pubspec.yaml') ||
         filePath.contains(
           'package${path.separator}core${path.separator}pubspec.yaml',
         );
@@ -2036,7 +2103,7 @@ class SyncMonorepoService {
         if (fileName == 'melos.yaml' || fileName == 'pubspec.yaml') {
           content = _convertMelosYaml(content, config);
         } else {
-          final patterns = TemplateConverter.buildPatterns(config);
+          final patterns = _getPatterns(config);
           content = TemplateConverter.convertContent(
             content,
             patterns,
@@ -2131,7 +2198,7 @@ class SyncMonorepoService {
             result.add('{{#enable_admin}}');
             inEnableAdminBlock = true;
           }
-          final patterns = TemplateConverter.buildPatterns(config);
+          final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add(line);
           continue;
@@ -2148,7 +2215,7 @@ class SyncMonorepoService {
             result.add('{{#enable_admin}}');
             inEnableAdminBlock = true;
           }
-          final patterns = TemplateConverter.buildPatterns(config);
+          final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add(line);
           continue;
@@ -2166,7 +2233,7 @@ class SyncMonorepoService {
             result.add('{{#has_serverpod}}');
             inHasServerpodBlock = true;
           }
-          final patterns = TemplateConverter.buildPatterns(config);
+          final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add(line);
 
@@ -2190,7 +2257,7 @@ class SyncMonorepoService {
 
         // widgetbook 패키지 처리
         if (line.contains('${projectName}_widgetbook')) {
-          final patterns = TemplateConverter.buildPatterns(config);
+          final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add(line);
           continue;
@@ -2213,7 +2280,7 @@ class SyncMonorepoService {
         }
 
         // 일반 패키지 처리
-        final patterns = TemplateConverter.buildPatterns(config);
+        final patterns = _getPatterns(config);
         line = TemplateConverter.convertContent(line, patterns);
         result.add(line);
         continue;
@@ -2237,7 +2304,7 @@ class SyncMonorepoService {
                 (line.contains('Console') &&
                     line.contains('dependBuild:feature:console')))) {
           // echo 라인을 조건부로 감싸기
-          final patterns = TemplateConverter.buildPatterns(config);
+          final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add('{{#enable_admin}}');
           result.add(line);
@@ -2263,7 +2330,7 @@ class SyncMonorepoService {
       }
 
       // 일반 패턴 변환 적용
-      final patterns = TemplateConverter.buildPatterns(config);
+      final patterns = _getPatterns(config);
       line = TemplateConverter.convertContent(line, patterns);
       result.add(line);
     }
