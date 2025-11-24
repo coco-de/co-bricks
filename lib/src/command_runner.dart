@@ -1,10 +1,10 @@
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:cli_completion/cli_completion.dart';
-import 'package:mason_logger/mason_logger.dart';
-import 'package:pub_updater/pub_updater.dart';
 import 'package:co_bricks/src/commands/commands.dart';
 import 'package:co_bricks/src/version.dart';
+import 'package:mason_logger/mason_logger.dart';
+import 'package:pub_updater/pub_updater.dart';
 
 const executableName = 'co_bricks';
 const packageName = 'co_bricks';
@@ -39,6 +39,7 @@ class CoBricksCommandRunner extends CompletionCommandRunner<int> {
     // Add sub commands
     addCommand(CreateCommand(logger: _logger, generator: null));
     addCommand(CreateFromConfigCommand(logger: _logger, generator: null));
+    addCommand(DiffCommand(logger: _logger));
     addCommand(SampleCommand(logger: _logger));
     addCommand(SyncCommand(logger: _logger));
     addCommand(UpdateCommand(logger: _logger, pubUpdater: _pubUpdater));
