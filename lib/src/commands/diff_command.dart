@@ -20,14 +20,15 @@ class DiffCommand extends Command<int> {
       ..addOption(
         'project-a',
         abbr: 'a',
-        help: 'Path to Project A root directory',
+        help:
+            'Path to Project A root directory (or single project for analysis)',
         mandatory: true,
       )
       ..addOption(
         'project-b',
         abbr: 'b',
-        help: 'Path to Project B root directory',
-        mandatory: true,
+        help:
+            'Path to Project B root directory (optional - for comparison mode)',
       )
       ..addOption(
         'feature',
@@ -64,7 +65,7 @@ class DiffCommand extends Command<int> {
   Future<int> run() async {
     try {
       final projectAPath = argResults?['project-a'] as String;
-      final projectBPath = argResults?['project-b'] as String;
+      final projectBPath = argResults?['project-b'] as String?;
       final featureName = argResults?['feature'] as String?;
       final outputDir = argResults?['output'] as String;
       final allFeatures = argResults?['all-features'] as bool;
@@ -77,48 +78,82 @@ class DiffCommand extends Command<int> {
         return ExitCode.usage.code;
       }
 
-      // Validate project directories
+      // Validate project A
       final projectA = Directory(projectAPath);
-      final projectB = Directory(projectBPath);
-
       if (!projectA.existsSync()) {
         _logger.err('Project A directory does not exist: $projectAPath');
         return ExitCode.noInput.code;
       }
 
-      if (!projectB.existsSync()) {
-        _logger.err('Project B directory does not exist: $projectBPath');
-        return ExitCode.noInput.code;
+      // Check if comparison mode or single project analysis
+      final isComparisonMode = projectBPath != null;
+      Directory? projectB;
+
+      if (isComparisonMode) {
+        projectB = Directory(projectBPath);
+        if (!projectB.existsSync()) {
+          _logger.err('Project B directory does not exist: $projectBPath');
+          return ExitCode.noInput.code;
+        }
       }
 
-      _logger
-        ..info('🔍 Starting diff detection...')
-        ..info('   Project A: $projectAPath')
-        ..info('   Project B: $projectBPath')
-        ..info('   Output: $outputDir/');
+      // Display mode info
+      if (isComparisonMode) {
+        _logger
+          ..info('🔍 Starting diff detection (comparison mode)...')
+          ..info('   Project A: $projectAPath')
+          ..info('   Project B: $projectBPath')
+          ..info('   Output: $outputDir/');
+      } else {
+        _logger
+          ..info('🔍 Starting project analysis (single project mode)...')
+          ..info('   Project: $projectAPath')
+          ..info('   Output: $outputDir/');
+      }
 
       final reporter = DiffReporter();
       final differ = FeatureDiffer();
 
       if (allFeatures) {
-        await _compareAllFeatures(
-          differ,
-          reporter,
-          projectA,
-          projectB,
-          outputDir,
-          fullAnalysis,
-        );
+        if (isComparisonMode) {
+          await _compareAllFeatures(
+            differ,
+            reporter,
+            projectA,
+            projectB!,
+            outputDir,
+            fullAnalysis,
+          );
+        } else {
+          await _analyzeAllFeatures(
+            differ,
+            reporter,
+            projectA,
+            outputDir,
+            fullAnalysis,
+          );
+        }
       } else {
-        await _compareSingleFeature(
-          differ,
-          reporter,
-          projectA,
-          projectB,
-          featureName!,
-          outputDir,
-          fullAnalysis,
-        );
+        if (isComparisonMode) {
+          await _compareSingleFeature(
+            differ,
+            reporter,
+            projectA,
+            projectB!,
+            featureName!,
+            outputDir,
+            fullAnalysis,
+          );
+        } else {
+          await _analyzeSingleFeature(
+            differ,
+            reporter,
+            projectA,
+            featureName!,
+            outputDir,
+            fullAnalysis,
+          );
+        }
       }
 
       _logger
@@ -377,5 +412,204 @@ class DiffCommand extends Command<int> {
       complexity: QualityScore(score: 0, details: 'Not analyzed'),
       recommendation: 'N/A',
     );
+  }
+
+  /// Analyze single feature against bricks
+  Future<void> _analyzeSingleFeature(
+    FeatureDiffer differ,
+    DiffReporter reporter,
+    Directory templateProject,
+    String featureName,
+    String outputDir,
+    bool fullAnalysis,
+  ) async {
+    // Find bricks directory
+    final bricksDir = _findBricksDirectory(templateProject);
+    if (bricksDir == null) {
+      _logger.err('Could not find bricks directory');
+      return;
+    }
+
+    // Construct brick path based on feature
+    final brickFeatureDir = Directory(
+      path.join(bricksDir.path, 'app', '__brick__', 'feature', featureName),
+    );
+
+    if (!brickFeatureDir.existsSync()) {
+      _logger.warn(
+        'Feature "$featureName" not found in bricks, creating baseline report',
+      );
+      // Just analyze the template project
+      await _createBaselineReport(
+        templateProject,
+        featureName,
+        outputDir,
+      );
+      return;
+    }
+
+    _logger
+      ..info('\n📊 Comparing feature: $featureName')
+      ..info('   Template: ${templateProject.path}')
+      ..info('   Brick: ${brickFeatureDir.path}');
+
+    // Use existing comparison logic
+    await _compareSingleFeature(
+      differ,
+      reporter,
+      templateProject,
+      brickFeatureDir,
+      featureName,
+      outputDir,
+      fullAnalysis,
+    );
+  }
+
+  /// Analyze all features against bricks
+  Future<void> _analyzeAllFeatures(
+    FeatureDiffer differ,
+    DiffReporter reporter,
+    Directory templateProject,
+    String outputDir,
+    bool fullAnalysis,
+  ) async {
+    // Find bricks directory
+    final bricksDir = _findBricksDirectory(templateProject);
+    if (bricksDir == null) {
+      _logger.err('Could not find bricks directory');
+      return;
+    }
+
+    final brickAppDir = Directory(
+      path.join(bricksDir.path, 'app', '__brick__'),
+    );
+
+    if (!brickAppDir.existsSync()) {
+      _logger.err('Brick app directory not found: ${brickAppDir.path}');
+      return;
+    }
+
+    _logger
+      ..info('\n📊 Comparing all features...')
+      ..info('   Template: ${templateProject.path}')
+      ..info('   Bricks: ${brickAppDir.path}');
+
+    // Use existing comparison logic
+    await _compareAllFeatures(
+      differ,
+      reporter,
+      templateProject,
+      brickAppDir,
+      outputDir,
+      fullAnalysis,
+    );
+  }
+
+  /// Find bricks directory by traversing up from template project
+  Directory? _findBricksDirectory(Directory templateProject) {
+    var current = templateProject;
+
+    // Traverse up to find bricks directory
+    for (var i = 0; i < 5; i++) {
+      final bricksDir = Directory(path.join(current.path, 'bricks'));
+      if (bricksDir.existsSync()) {
+        return bricksDir;
+      }
+
+      final parent = current.parent;
+      if (parent.path == current.path) {
+        break; // Reached root
+      }
+      current = parent;
+    }
+
+    // Also try ../bricks and ../../bricks directly
+    final relativeBricks1 = Directory(
+      path.join(templateProject.path, '..', 'bricks'),
+    );
+    if (relativeBricks1.existsSync()) {
+      return relativeBricks1;
+    }
+
+    final relativeBricks2 = Directory(
+      path.join(templateProject.path, '..', '..', 'bricks'),
+    );
+    if (relativeBricks2.existsSync()) {
+      return relativeBricks2;
+    }
+
+    return null;
+  }
+
+  /// Create baseline report for new feature
+  Future<void> _createBaselineReport(
+    Directory templateProject,
+    String featureName,
+    String outputDir,
+  ) async {
+    _logger.info(
+      '\n📋 Creating baseline report for new feature: $featureName',
+    );
+
+    // Scan feature files in template
+    final featurePath = path.join(
+      templateProject.path,
+      'feature',
+      'common',
+      featureName,
+    );
+    final featureDir = Directory(featurePath);
+
+    if (!featureDir.existsSync()) {
+      _logger.err('Feature directory not found: $featurePath');
+      return;
+    }
+
+    // Count files
+    var fileCount = 0;
+    await for (final entity in featureDir.list(recursive: true)) {
+      if (entity is File && entity.path.endsWith('.dart')) {
+        fileCount++;
+      }
+    }
+
+    // Create simple baseline report
+    final reportPath = path.join(
+      outputDir,
+      '$featureName-baseline-report.md',
+    );
+    final report = '''
+# Feature Baseline Report: $featureName
+
+Generated: ${DateTime.now()}
+
+---
+
+## 📊 Overview
+
+This is a new feature not yet synced to bricks.
+
+### Template Project
+- **Location**: ${templateProject.path}
+- **Feature Path**: feature/common/$featureName
+- **Dart Files**: $fileCount
+
+### Status
+- ✨ New feature ready for sync
+- ⚠️ Not yet in bricks - run sync command to add
+
+### Recommendation
+Run the sync command to add this feature to bricks:
+```bash
+dart run bin/co_bricks.dart sync --type app --project-dir ${templateProject.path}
+```
+
+---
+
+*Report generated by co-bricks diff detection engine*
+''';
+
+    await File(reportPath).writeAsString(report);
+    _logger.success('Baseline report created: $reportPath');
   }
 }
