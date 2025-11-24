@@ -296,6 +296,40 @@ The tool uses ordered regex patterns in `TemplateConverter.buildPatterns()`:
 
 Pattern application order is critical - more specific patterns must execute before general ones.
 
+### Optional Feature Preservation
+
+When synchronizing templates that don't include optional features (like console when `ENABLE_ADMIN=false`), the sync process preserves existing brick structures for those features:
+
+**Feature Preservation Flow**:
+1. **Detection**: Before sync, check if optional features exist in source template
+2. **Backup**: If feature exists in brick but not in template, backup to temporary directory
+3. **Sync**: Normal sync process copies template → brick
+4. **Restore**: After sync, restore backed-up optional features from temporary directory
+
+**Supported Optional Features**:
+- `console` - Controlled by `ENABLE_ADMIN` variable in `.envrc`
+  - Console app directory: `app/{{project_name}}_console`
+  - Console feature directory: `feature/{{#enable_admin}}console{{/enable_admin}}`
+  - Console packages in melos.yaml with `{{#enable_admin}}` blocks
+
+**Validation**:
+- `_validateOptionalFeatures()` checks `.envrc` for `ENABLE_ADMIN` setting
+- Warns if `ENABLE_ADMIN=true` but console directories are missing
+- Provides info message if `ENABLE_ADMIN=false` and console not present
+
+**Implementation Details**:
+- `_preserveOptionalFeatures()`: Backs up conditional directories using `Directory.systemTemp`
+- `_restoreOptionalFeatures()`: Restores directories after sync completes
+- `_extractConditionalBlocks()`: Extracts `{{#enable_admin}}` package blocks from melos.yaml
+- `_mergeConditionalBlocks()`: Merges console packages back into synced melos.yaml
+
+**Case Transformation Handling**:
+Template variable case transformations (paramCase, snakeCase, etc.) are context-aware:
+- GitHub URLs use paramCase: `github.com/org/{{project_name.paramCase()}}`
+- Package names use snakeCase: `{{project_name.snakeCase()}}_service`
+- Firestore collections use snakeCase: `{{project_name.snakeCase()}}_users`
+- No blanket replacements - `TemplateConverter` handles context-specific transformations
+
 ### Directory Discovery Logic
 
 Both services traverse upward from the current/specified directory to find:
