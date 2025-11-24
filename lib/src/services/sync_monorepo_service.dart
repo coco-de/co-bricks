@@ -150,6 +150,9 @@ class SyncMonorepoService {
     );
     logger.info('');
 
+    // 선택적 기능 검증
+    await _validateOptionalFeatures(templateDir, config);
+
     // 동기화할 디렉토리들 (backend는 serverpod_backend brick으로 별도 관리)
     final directories = [
       'feature',
@@ -502,10 +505,26 @@ class SyncMonorepoService {
     // 타겟 디렉토리 생성
     targetDir.createSync(recursive: true);
 
+    // 선택적 feature 보존 로직
+    Map<String, Directory>? preservedOptionalFeatures;
+    if (dirName == 'feature') {
+      preservedOptionalFeatures = await _preserveOptionalFeatures(
+        sourceDir,
+        targetDir,
+        config,
+      );
+    }
+
     logger.info('   📋 Updating files from template...');
 
     // 디렉토리 복사
     await FileUtils.copyDirectory(sourceDir, targetDir, overwrite: true);
+
+    // 보존된 선택적 feature 복원
+    if (preservedOptionalFeatures != null &&
+        preservedOptionalFeatures.isNotEmpty) {
+      await _restoreOptionalFeatures(preservedOptionalFeatures, targetDir);
+    }
 
     // Mason 조건부 파일 구조 복원
     for (final structure in conditionalStructures) {
@@ -855,6 +874,9 @@ class SyncMonorepoService {
     final consoleDir = Directory(path.join(featureDir.path, 'console'));
 
     if (!consoleDir.existsSync()) {
+      logger.detail(
+        '   ⏭️  Console directory not found (skipping conditional conversion)',
+      );
       return;
     }
 
@@ -2158,7 +2180,21 @@ class SyncMonorepoService {
 
         // melos.yaml과 pubspec.yaml은 특별 처리
         if (fileName == 'melos.yaml' || fileName == 'pubspec.yaml') {
+          // 기존 brick의 melos.yaml에서 조건부 블록 추출 (보존용)
+          String? existingConditionalBlocks;
+          if (targetFile.existsSync()) {
+            final existingContent = await targetFile.readAsString();
+            existingConditionalBlocks =
+                _extractConditionalBlocks(existingContent);
+          }
+
           content = _convertMelosYaml(content, config);
+
+          // 기존 조건부 블록을 병합
+          if (existingConditionalBlocks != null &&
+              existingConditionalBlocks.isNotEmpty) {
+            content = _mergeConditionalBlocks(content, existingConditionalBlocks);
+          }
         } else {
           final patterns = _getPatterns(config);
           content = TemplateConverter.convertContent(
@@ -2402,12 +2438,9 @@ class SyncMonorepoService {
       result.add('{{/enable_admin}}');
     }
 
-    // paramCase를 snakeCase로 변환
+    // TemplateConverter가 컨텍스트에 맞게 case 변환을 처리하므로
+    // 여기서 blanket replacement는 하지 않음
     var finalResult = result.join('\n');
-    finalResult = finalResult.replaceAll(
-      '{{project_name.paramCase()}}',
-      '{{project_name.snakeCase()}}',
-    );
 
     // build:select: 스크립트의 ignore 목록에 조건부 항목 추가
     finalResult = _addConditionalIgnoreItems(finalResult);
@@ -2666,6 +2699,233 @@ class SyncMonorepoService {
       }
 
       result.add(line);
+    }
+
+    return result.join('\n');
+  }
+
+  /// 선택적 feature 보존 (템플릿에 없는 경우)
+  ///
+  /// 선택적 feature (console 등)가 템플릿에 없으면 brick의 기존 구조를 보존
+  Future<Map<String, Directory>> _preserveOptionalFeatures(
+    Directory sourceDir,
+    Directory targetDir,
+    ProjectConfig config,
+  ) async {
+    final preserved = <String, Directory>{};
+
+    // 선택적 feature 목록 (조건부로 포함되는 feature들)
+    final optionalFeatures = <String, String>{
+      'console': 'enable_admin', // feature name: condition variable
+    };
+
+    for (final entry in optionalFeatures.entries) {
+      final featureName = entry.key;
+      final condition = entry.value;
+
+      // 소스에 해당 feature가 있는지 확인
+      final sourceFeatureDir = Directory(
+        path.join(sourceDir.path, featureName),
+      );
+
+      // 타겟에 조건부 디렉토리가 있는지 확인
+      final conditionalDirName = '{{#$condition}}$featureName{{';
+      final targetConditionalDir = Directory(
+        path.join(targetDir.path, conditionalDirName),
+      );
+
+      // 소스에는 없지만 타겟(brick)에는 있는 경우 → 보존해야 함
+      if (!sourceFeatureDir.existsSync() && targetConditionalDir.existsSync()) {
+        logger.info(
+          '   ⏭️  Preserving optional feature: $featureName (not in template)',
+        );
+
+        // 임시 디렉토리에 백업
+        final tempDir = Directory.systemTemp.createTempSync('optional_feature_');
+        await FileUtils.copyDirectory(
+          targetConditionalDir,
+          tempDir,
+          overwrite: true,
+        );
+        preserved[featureName] = tempDir;
+
+        logger.detail('   💾 Backed up to: ${tempDir.path}');
+      }
+    }
+
+    return preserved;
+  }
+
+  /// 보존된 선택적 feature 복원
+  Future<void> _restoreOptionalFeatures(
+    Map<String, Directory> preserved,
+    Directory targetDir,
+  ) async {
+    for (final entry in preserved.entries) {
+      final featureName = entry.key;
+      final backupDir = entry.value;
+
+      // 조건부 디렉토리 이름 복원 (console → {{#enable_admin}}console{{)
+      final conditionalDirName = '{{#${_getConditionForFeature(featureName)}}}'
+          '$featureName{{';
+      final targetConditionalDir = Directory(
+        path.join(targetDir.path, conditionalDirName),
+      );
+
+      // 기존 디렉토리가 있으면 삭제 (동기화 과정에서 생성되었을 수 있음)
+      if (targetConditionalDir.existsSync()) {
+        await targetConditionalDir.delete(recursive: true);
+      }
+
+      // 백업에서 복원
+      await FileUtils.copyDirectory(backupDir, targetConditionalDir);
+
+      logger.info('   ✅ Restored optional feature: $featureName');
+
+      // 임시 백업 디렉토리 삭제
+      await backupDir.delete(recursive: true);
+    }
+  }
+
+  /// Feature에 해당하는 조건 변수 반환
+  String _getConditionForFeature(String featureName) {
+    switch (featureName) {
+      case 'console':
+        return 'enable_admin';
+      default:
+        return 'unknown';
+    }
+  }
+
+  /// 선택적 기능 검증
+  ///
+  /// ENABLE_ADMIN=true인데 console이 없으면 경고
+  Future<void> _validateOptionalFeatures(
+    Directory templateDir,
+    ProjectConfig config,
+  ) async {
+    // .envrc에서 ENABLE_ADMIN 값 읽기
+    final envrcFile = File(path.join(templateDir.path, '.envrc'));
+    var enableAdmin = false;
+
+    if (envrcFile.existsSync()) {
+      final content = await envrcFile.readAsString();
+      final match = RegExp(
+        r'export\s+ENABLE_ADMIN="(true|false)"',
+      ).firstMatch(content);
+
+      if (match != null) {
+        final value = match.group(1);
+        enableAdmin = value == 'true';
+      }
+    }
+
+    // Console feature 검증
+    final consoleAppDir = Directory(
+      path.join(templateDir.path, 'app', '${config.projectName}_console'),
+    );
+    final consoleFeatureDir = Directory(
+      path.join(templateDir.path, 'feature', 'console'),
+    );
+
+    if (enableAdmin) {
+      if (!consoleAppDir.existsSync() || !consoleFeatureDir.existsSync()) {
+        logger.warn(
+          '⚠️  Warning: ENABLE_ADMIN=true but console app/feature not found',
+        );
+        logger.warn('   Expected locations:');
+        if (!consoleAppDir.existsSync()) {
+          logger.warn('   - app/${config.projectName}_console (missing)');
+        }
+        if (!consoleFeatureDir.existsSync()) {
+          logger.warn('   - feature/console (missing)');
+        }
+        logger.warn(
+          '   → Existing console templates in brick will be preserved',
+        );
+        logger.info('');
+      }
+    } else {
+      // ENABLE_ADMIN=false인 경우 정보성 메시지
+      if (!consoleAppDir.existsSync() && !consoleFeatureDir.existsSync()) {
+        logger.detail('ℹ️  Console feature not present (ENABLE_ADMIN=false)');
+        logger.detail(
+          '   → Existing console templates in brick will be preserved',
+        );
+      }
+    }
+  }
+
+  /// 기존 melos.yaml에서 조건부 블록 추출 (console 관련)
+  ///
+  /// {{#enable_admin}}로 감싸진 패키지들을 추출하여 보존
+  String? _extractConditionalBlocks(String content) {
+    final lines = content.split('\n');
+    final conditionalLines = <String>[];
+    var inEnableAdminBlock = false;
+
+    for (var line in lines) {
+      final trimmed = line.trim();
+
+      // enable_admin 블록 시작
+      if (trimmed == '{{#enable_admin}}') {
+        inEnableAdminBlock = true;
+        continue;
+      }
+
+      // enable_admin 블록 끝
+      if (trimmed == '{{/enable_admin}}') {
+        inEnableAdminBlock = false;
+        continue;
+      }
+
+      // 블록 내부의 패키지 라인 저장
+      if (inEnableAdminBlock && trimmed.startsWith('- ')) {
+        conditionalLines.add(line);
+      }
+    }
+
+    return conditionalLines.isNotEmpty ? conditionalLines.join('\n') : null;
+  }
+
+  /// 조건부 블록을 병합
+  ///
+  /// 새로 생성된 melos.yaml에 기존의 console 관련 조건부 블록을 추가
+  String _mergeConditionalBlocks(String content, String conditionalBlocks) {
+    final lines = content.split('\n');
+    final result = <String>[];
+    var packagesFound = false;
+    var widgetbookFound = false;
+
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      final trimmed = line.trim();
+
+      result.add(line);
+
+      // packages: 섹션 진입 확인
+      if (trimmed == 'packages:') {
+        packagesFound = true;
+        continue;
+      }
+
+      // widgetbook 패키지 다음에 console 조건부 블록 삽입
+      if (packagesFound &&
+          !widgetbookFound &&
+          line.contains('_widgetbook') &&
+          !conditionalBlocks.isEmpty) {
+        // 다음 라인이 조건부 블록이 아니면 삽입
+        if (i + 1 < lines.length) {
+          final nextLine = lines[i + 1].trim();
+          if (!nextLine.startsWith('{{#enable_admin}}')) {
+            result.add('{{#enable_admin}}');
+            result.add(conditionalBlocks);
+            result.add('{{/enable_admin}}');
+            widgetbookFound = true;
+            logger.detail('   💾 Preserved console packages from existing brick');
+          }
+        }
+      }
     }
 
     return result.join('\n');
