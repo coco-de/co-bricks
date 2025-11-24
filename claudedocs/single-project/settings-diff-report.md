@@ -1,16 +1,16 @@
 # Feature Diff Report: settings
 
-Generated: 2025-11-24 17:15:11.201037
+Generated: 2025-11-24 17:19:17.424177
 
 ---
 
 ## 📊 Executive Summary
 
 ### File Structure
-- **Total Files**: 44
-- **Common Files**: 41
-- **Project A Only**: 1
-- **Project B Only**: 2
+- **Total Files**: 42
+- **Common Files**: 0
+- **Project A Only**: 42
+- **Project B Only**: 0
 
 ### Interface Compatibility
 - **Common Methods**: 0
@@ -29,7 +29,13 @@ Generated: 2025-11-24 17:15:11.201037
 
 ## 📁 File Structure Analysis
 
-### Common Files (41)
+### Common Files (0)
+
+*No common files found*
+
+### Project A Only (42)
+
+Path: `../good-teacher/feature/common/settings`
 
 - `test/src/settings_test.dart`
 - `lib/settings.dart`
@@ -39,6 +45,7 @@ Generated: 2025-11-24 17:15:11.201037
 - `lib/src/route/settings_route.dart`
 - `lib/src/route/route.dart`
 - `lib/src/route/settings_route.g.dart`
+- `lib/src/data/repository/mixins/settings_openapi_mixin.dart`
 - `lib/src/data/repository/mixins/mixins.dart`
 - `lib/src/data/repository/settings_repository.dart`
 - `lib/src/data/repository/repository.dart`
@@ -73,18 +80,11 @@ Generated: 2025-11-24 17:15:11.201037
 - `lib/src/presentation/bloc/bloc.dart`
 - `.dart_tool/build/entrypoint/build.dart`
 
-### Project A Only (1)
+### Project B Only (0)
 
-Path: `../good-teacher/feature/common/settings`
+Path: ``
 
-- `lib/src/data/repository/mixins/settings_openapi_mixin.dart`
-
-### Project B Only (2)
-
-Path: `../blueprint/feature/common/settings`
-
-- `lib/src/data/repository/mixins/settings_serverpod_mixin.dart`
-- `.dart_tool/flutter_build/dart_plugin_registrant.dart`
+*All files are common or in Project A*
 
 ---
 
@@ -142,11 +142,8 @@ Not analyzed
 
 ### File Structure
 
-- **Add to Project B**: 1 files missing
-  - Consider: lib/src/data/repository/mixins/settings_openapi_mixin.dart
-
-- **Add to Project A**: 2 files missing
-  - Consider: lib/src/data/repository/mixins/settings_serverpod_mixin.dart, .dart_tool/flutter_build/dart_plugin_registrant.dart
+- **Add to Project B**: 42 files missing
+  - Consider: test/src/settings_test.dart, lib/settings.dart, lib/src/di/injector.dart...
 
 ### Quality Improvements
 

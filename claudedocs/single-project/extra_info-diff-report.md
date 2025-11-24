@@ -1,16 +1,16 @@
-# Feature Diff Report: settings
+# Feature Diff Report: extra_info
 
-Generated: 2025-11-24 17:15:11.201037
+Generated: 2025-11-24 17:19:17.425004
 
 ---
 
 ## 📊 Executive Summary
 
 ### File Structure
-- **Total Files**: 44
-- **Common Files**: 41
-- **Project A Only**: 1
-- **Project B Only**: 2
+- **Total Files**: 47
+- **Common Files**: 0
+- **Project A Only**: 47
+- **Project B Only**: 0
 
 ### Interface Compatibility
 - **Common Methods**: 0
@@ -29,62 +29,67 @@ Generated: 2025-11-24 17:15:11.201037
 
 ## 📁 File Structure Analysis
 
-### Common Files (41)
+### Common Files (0)
 
-- `test/src/settings_test.dart`
-- `lib/settings.dart`
+*No common files found*
+
+### Project A Only (47)
+
+Path: `../good-teacher/feature/common/extra_info`
+
+- `test/src/extra_info_test.dart`
+- `lib/extra_info.dart`
 - `lib/src/di/injector.dart`
 - `lib/src/di/injector.module.dart`
 - `lib/src/di/di.dart`
-- `lib/src/route/settings_route.dart`
 - `lib/src/route/route.dart`
-- `lib/src/route/settings_route.g.dart`
+- `lib/src/route/extra_info_route.dart`
+- `lib/src/route/extra_info_route.g.dart`
+- `lib/src/data/repository/extra_info_repository.dart`
 - `lib/src/data/repository/mixins/mixins.dart`
-- `lib/src/data/repository/settings_repository.dart`
+- `lib/src/data/repository/mixins/extra_info_openapi_mixin.dart`
 - `lib/src/data/repository/repository.dart`
 - `lib/src/data/data.dart`
-- `lib/src/data/local/settings_database.g.dart`
-- `lib/src/data/local/tables/settings_table.dart`
+- `lib/src/data/local/tables/user_extra_infos_table.dart`
 - `lib/src/data/local/tables/tables.dart`
 - `lib/src/data/local/local.dart`
+- `lib/src/data/local/extra_info_database.g.dart`
+- `lib/src/data/local/dao/user_extra_info_dao.g.dart`
+- `lib/src/data/local/dao/user_extra_info_dao.dart`
 - `lib/src/data/local/dao/dao.dart`
-- `lib/src/data/local/dao/settings_dao.g.dart`
-- `lib/src/data/local/dao/settings_dao.dart`
-- `lib/src/data/local/settings_database.dart`
-- `lib/src/domain/repository/i_settings_repository.dart`
+- `lib/src/data/local/extra_info_database.dart`
+- `lib/src/domain/repository/i_extra_info_repository.dart`
 - `lib/src/domain/repository/repository.dart`
-- `lib/src/domain/entity/settings.freezed.dart`
-- `lib/src/domain/entity/settings.g.dart`
+- `lib/src/domain/entity/user_extra_info.dart`
 - `lib/src/domain/entity/entity.dart`
-- `lib/src/domain/entity/settings.dart`
+- `lib/src/domain/failure/failure.dart`
+- `lib/src/domain/failure/extra_info_failure_messages.dart`
+- `lib/src/domain/failure/extra_info_failure.dart`
 - `lib/src/domain/domain.dart`
-- `lib/src/domain/usecase/update_settings.dart`
+- `lib/src/domain/usecase/create_user_extra_info_usecase.dart`
+- `lib/src/domain/usecase/extra_info.dart`
+- `lib/src/domain/usecase/get_user_extra_info_usecase.dart`
+- `lib/src/domain/usecase/delete_user_extra_info_usecase.dart`
+- `lib/src/domain/usecase/update_user_extra_info_usecase.dart`
 - `lib/src/domain/usecase/usecase.dart`
+- `lib/src/domain/exception/exception.dart`
+- `lib/src/domain/exception/extra_info_exception.dart`
 - `lib/src/presentation/page/page.dart`
-- `lib/src/presentation/page/settings_page.dart`
-- `lib/src/presentation/widget/theme_icon_button.dart`
-- `lib/src/presentation/widget/widget.dart`
-- `lib/src/presentation/widget/toggle_card.dart`
-- `lib/src/presentation/widget/info_card.dart`
+- `lib/src/presentation/page/extra_info_page.dart`
 - `lib/src/presentation/presentation.dart`
-- `lib/src/presentation/bloc/settings/settings_bloc.dart`
-- `lib/src/presentation/bloc/settings/settings_state.dart`
-- `lib/src/presentation/bloc/settings/settings_event.dart`
+- `lib/src/presentation/widgets/widgets.dart`
+- `lib/src/presentation/widgets/user_extra_info_form.dart`
+- `lib/src/presentation/bloc/extra_info/extra_info_event.dart`
+- `lib/src/presentation/bloc/extra_info/extra_info_state.dart`
+- `lib/src/presentation/bloc/extra_info/extra_info_bloc.dart`
 - `lib/src/presentation/bloc/bloc.dart`
 - `.dart_tool/build/entrypoint/build.dart`
 
-### Project A Only (1)
+### Project B Only (0)
 
-Path: `../good-teacher/feature/common/settings`
+Path: ``
 
-- `lib/src/data/repository/mixins/settings_openapi_mixin.dart`
-
-### Project B Only (2)
-
-Path: `../blueprint/feature/common/settings`
-
-- `lib/src/data/repository/mixins/settings_serverpod_mixin.dart`
-- `.dart_tool/flutter_build/dart_plugin_registrant.dart`
+*All files are common or in Project A*
 
 ---
 
@@ -142,11 +147,8 @@ Not analyzed
 
 ### File Structure
 
-- **Add to Project B**: 1 files missing
-  - Consider: lib/src/data/repository/mixins/settings_openapi_mixin.dart
-
-- **Add to Project A**: 2 files missing
-  - Consider: lib/src/data/repository/mixins/settings_serverpod_mixin.dart, .dart_tool/flutter_build/dart_plugin_registrant.dart
+- **Add to Project B**: 47 files missing
+  - Consider: test/src/extra_info_test.dart, lib/extra_info.dart, lib/src/di/injector.dart...
 
 ### Quality Improvements
 

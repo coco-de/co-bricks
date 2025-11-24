@@ -1,16 +1,16 @@
-# Feature Diff Report: splash
+# Feature Diff Report: withdraw
 
-Generated: 2025-11-24 17:16:00.866111
+Generated: 2025-11-24 17:19:17.426369
 
 ---
 
 ## 📊 Executive Summary
 
 ### File Structure
-- **Total Files**: 31
-- **Common Files**: 23
-- **Project A Only**: 3
-- **Project B Only**: 5
+- **Total Files**: 26
+- **Common Files**: 0
+- **Project A Only**: 26
+- **Project B Only**: 0
 
 ### Interface Compatibility
 - **Common Methods**: 0
@@ -29,49 +29,46 @@ Generated: 2025-11-24 17:16:00.866111
 
 ## 📁 File Structure Analysis
 
-### Common Files (23)
+### Common Files (0)
 
-- `test/src/splash_test.dart`
-- `lib/splash.dart`
-- `lib/src/route/splash_route.g.dart`
-- `lib/src/route/splash_route.dart`
-- `lib/src/route/route.dart`
-- `lib/src/util/platform_helper.dart`
-- `lib/src/util/util.dart`
-- `lib/src/util/web_platform_stub.dart`
-- `lib/src/data/repository/mixins/mixins.dart`
-- `lib/src/data/repository/repository.dart`
-- `lib/src/data/repository/splash_repository.dart`
-- `lib/src/data/data.dart`
-- `lib/src/domain/interface/interface.dart`
-- `lib/src/domain/interface/i_splash_repository.dart`
-- `lib/src/domain/domain.dart`
-- `lib/src/presentation/page/page.dart`
-- `lib/src/presentation/page/splash_page.dart`
-- `lib/src/presentation/widget/splash_widget.dart`
-- `lib/src/presentation/widget/widget.dart`
-- `lib/src/presentation/presentation.dart`
-- `lib/src/presentation/stub/stub.dart`
-- `lib/src/presentation/stub/web_platform_stub.dart`
-- `.dart_tool/build/entrypoint/build.dart`
+*No common files found*
 
-### Project A Only (3)
+### Project A Only (26)
 
-Path: `../good-teacher/feature/common/splash`
+Path: `../good-teacher/feature/common/withdraw`
 
-- `lib/src/utils/platform_helper.dart`
-- `lib/src/utils/web_platform_stub.dart`
-- `lib/src/data/repository/mixins/splash_openapi_mixin.dart`
-
-### Project B Only (5)
-
-Path: `../blueprint/feature/common/splash`
-
+- `test/src/withdraw_test.dart`
+- `lib/withdraw.dart`
 - `lib/src/di/injector.dart`
 - `lib/src/di/injector.module.dart`
 - `lib/src/di/di.dart`
-- `lib/src/data/repository/mixins/splash_serverpod_mixin.dart`
-- `.dart_tool/flutter_build/dart_plugin_registrant.dart`
+- `lib/src/route/withdraw_route.dart`
+- `lib/src/route/route.dart`
+- `lib/src/route/withdraw_route.g.dart`
+- `lib/src/data/repository/withdraw_repository.dart`
+- `lib/src/data/repository/mixins/withdraw_openapi_mixin.dart`
+- `lib/src/data/repository/mixins/mixins.dart`
+- `lib/src/data/repository/repository.dart`
+- `lib/src/data/data.dart`
+- `lib/src/domain/interface/i_withdraw_repository.dart`
+- `lib/src/domain/interface/interface.dart`
+- `lib/src/domain/domain.dart`
+- `lib/src/domain/usecase/withdraw_usecase.dart`
+- `lib/src/domain/usecase/usecase.dart`
+- `lib/src/presentation/page/page.dart`
+- `lib/src/presentation/page/withdraw_page.dart`
+- `lib/src/presentation/presentation.dart`
+- `lib/src/presentation/bloc/bloc.dart`
+- `lib/src/presentation/bloc/withdraw/withdraw_event.dart`
+- `lib/src/presentation/bloc/withdraw/withdraw_state.dart`
+- `lib/src/presentation/bloc/withdraw/withdraw_bloc.dart`
+- `.dart_tool/build/entrypoint/build.dart`
+
+### Project B Only (0)
+
+Path: ``
+
+*All files are common or in Project A*
 
 ---
 
@@ -129,11 +126,8 @@ Not analyzed
 
 ### File Structure
 
-- **Add to Project B**: 3 files missing
-  - Consider: lib/src/utils/platform_helper.dart, lib/src/utils/web_platform_stub.dart, lib/src/data/repository/mixins/splash_openapi_mixin.dart
-
-- **Add to Project A**: 5 files missing
-  - Consider: lib/src/di/injector.dart, lib/src/di/injector.module.dart, lib/src/di/di.dart...
+- **Add to Project B**: 26 files missing
+  - Consider: test/src/withdraw_test.dart, lib/withdraw.dart, lib/src/di/injector.dart...
 
 ### Quality Improvements
 

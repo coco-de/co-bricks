@@ -1,16 +1,16 @@
 # Feature Diff Report: splash
 
-Generated: 2025-11-24 17:16:00.866111
+Generated: 2025-11-24 17:19:17.425376
 
 ---
 
 ## 📊 Executive Summary
 
 ### File Structure
-- **Total Files**: 31
-- **Common Files**: 23
-- **Project A Only**: 3
-- **Project B Only**: 5
+- **Total Files**: 26
+- **Common Files**: 0
+- **Project A Only**: 26
+- **Project B Only**: 0
 
 ### Interface Compatibility
 - **Common Methods**: 0
@@ -29,7 +29,13 @@ Generated: 2025-11-24 17:16:00.866111
 
 ## 📁 File Structure Analysis
 
-### Common Files (23)
+### Common Files (0)
+
+*No common files found*
+
+### Project A Only (26)
+
+Path: `../good-teacher/feature/common/splash`
 
 - `test/src/splash_test.dart`
 - `lib/splash.dart`
@@ -39,7 +45,10 @@ Generated: 2025-11-24 17:16:00.866111
 - `lib/src/util/platform_helper.dart`
 - `lib/src/util/util.dart`
 - `lib/src/util/web_platform_stub.dart`
+- `lib/src/utils/platform_helper.dart`
+- `lib/src/utils/web_platform_stub.dart`
 - `lib/src/data/repository/mixins/mixins.dart`
+- `lib/src/data/repository/mixins/splash_openapi_mixin.dart`
 - `lib/src/data/repository/repository.dart`
 - `lib/src/data/repository/splash_repository.dart`
 - `lib/src/data/data.dart`
@@ -55,23 +64,11 @@ Generated: 2025-11-24 17:16:00.866111
 - `lib/src/presentation/stub/web_platform_stub.dart`
 - `.dart_tool/build/entrypoint/build.dart`
 
-### Project A Only (3)
+### Project B Only (0)
 
-Path: `../good-teacher/feature/common/splash`
+Path: ``
 
-- `lib/src/utils/platform_helper.dart`
-- `lib/src/utils/web_platform_stub.dart`
-- `lib/src/data/repository/mixins/splash_openapi_mixin.dart`
-
-### Project B Only (5)
-
-Path: `../blueprint/feature/common/splash`
-
-- `lib/src/di/injector.dart`
-- `lib/src/di/injector.module.dart`
-- `lib/src/di/di.dart`
-- `lib/src/data/repository/mixins/splash_serverpod_mixin.dart`
-- `.dart_tool/flutter_build/dart_plugin_registrant.dart`
+*All files are common or in Project A*
 
 ---
 
@@ -129,11 +126,8 @@ Not analyzed
 
 ### File Structure
 
-- **Add to Project B**: 3 files missing
-  - Consider: lib/src/utils/platform_helper.dart, lib/src/utils/web_platform_stub.dart, lib/src/data/repository/mixins/splash_openapi_mixin.dart
-
-- **Add to Project A**: 5 files missing
-  - Consider: lib/src/di/injector.dart, lib/src/di/injector.module.dart, lib/src/di/di.dart...
+- **Add to Project B**: 26 files missing
+  - Consider: test/src/splash_test.dart, lib/splash.dart, lib/src/route/splash_route.g.dart...
 
 ### Quality Improvements
 

@@ -1,15 +1,15 @@
-# Feature Diff Report: settings
+# Feature Diff Report: withdraw
 
-Generated: 2025-11-24 17:15:11.201037
+Generated: 2025-11-24 17:17:29.383957
 
 ---
 
 ## 📊 Executive Summary
 
 ### File Structure
-- **Total Files**: 44
-- **Common Files**: 41
-- **Project A Only**: 1
+- **Total Files**: 28
+- **Common Files**: 23
+- **Project A Only**: 3
 - **Project B Only**: 2
 
 ### Interface Compatibility
@@ -29,61 +29,45 @@ Generated: 2025-11-24 17:15:11.201037
 
 ## 📁 File Structure Analysis
 
-### Common Files (41)
+### Common Files (23)
 
-- `test/src/settings_test.dart`
-- `lib/settings.dart`
+- `test/src/withdraw_test.dart`
+- `lib/withdraw.dart`
 - `lib/src/di/injector.dart`
 - `lib/src/di/injector.module.dart`
 - `lib/src/di/di.dart`
-- `lib/src/route/settings_route.dart`
+- `lib/src/route/withdraw_route.dart`
 - `lib/src/route/route.dart`
-- `lib/src/route/settings_route.g.dart`
+- `lib/src/route/withdraw_route.g.dart`
+- `lib/src/data/repository/withdraw_repository.dart`
 - `lib/src/data/repository/mixins/mixins.dart`
-- `lib/src/data/repository/settings_repository.dart`
 - `lib/src/data/repository/repository.dart`
 - `lib/src/data/data.dart`
-- `lib/src/data/local/settings_database.g.dart`
-- `lib/src/data/local/tables/settings_table.dart`
-- `lib/src/data/local/tables/tables.dart`
-- `lib/src/data/local/local.dart`
-- `lib/src/data/local/dao/dao.dart`
-- `lib/src/data/local/dao/settings_dao.g.dart`
-- `lib/src/data/local/dao/settings_dao.dart`
-- `lib/src/data/local/settings_database.dart`
-- `lib/src/domain/repository/i_settings_repository.dart`
-- `lib/src/domain/repository/repository.dart`
-- `lib/src/domain/entity/settings.freezed.dart`
-- `lib/src/domain/entity/settings.g.dart`
-- `lib/src/domain/entity/entity.dart`
-- `lib/src/domain/entity/settings.dart`
+- `lib/src/domain/interface/i_withdraw_repository.dart`
+- `lib/src/domain/interface/interface.dart`
 - `lib/src/domain/domain.dart`
-- `lib/src/domain/usecase/update_settings.dart`
-- `lib/src/domain/usecase/usecase.dart`
 - `lib/src/presentation/page/page.dart`
-- `lib/src/presentation/page/settings_page.dart`
-- `lib/src/presentation/widget/theme_icon_button.dart`
-- `lib/src/presentation/widget/widget.dart`
-- `lib/src/presentation/widget/toggle_card.dart`
-- `lib/src/presentation/widget/info_card.dart`
+- `lib/src/presentation/page/withdraw_page.dart`
 - `lib/src/presentation/presentation.dart`
-- `lib/src/presentation/bloc/settings/settings_bloc.dart`
-- `lib/src/presentation/bloc/settings/settings_state.dart`
-- `lib/src/presentation/bloc/settings/settings_event.dart`
 - `lib/src/presentation/bloc/bloc.dart`
+- `lib/src/presentation/bloc/withdraw/withdraw_event.dart`
+- `lib/src/presentation/bloc/withdraw/withdraw_state.dart`
+- `lib/src/presentation/bloc/withdraw/withdraw_bloc.dart`
 - `.dart_tool/build/entrypoint/build.dart`
 
-### Project A Only (1)
+### Project A Only (3)
 
-Path: `../good-teacher/feature/common/settings`
+Path: `../good-teacher/feature/common/withdraw`
 
-- `lib/src/data/repository/mixins/settings_openapi_mixin.dart`
+- `lib/src/data/repository/mixins/withdraw_openapi_mixin.dart`
+- `lib/src/domain/usecase/withdraw_usecase.dart`
+- `lib/src/domain/usecase/usecase.dart`
 
 ### Project B Only (2)
 
-Path: `../blueprint/feature/common/settings`
+Path: `../blueprint/feature/common/withdraw`
 
-- `lib/src/data/repository/mixins/settings_serverpod_mixin.dart`
+- `lib/src/data/repository/mixins/withdraw_serverpod_mixin.dart`
 - `.dart_tool/flutter_build/dart_plugin_registrant.dart`
 
 ---
@@ -142,11 +126,11 @@ Not analyzed
 
 ### File Structure
 
-- **Add to Project B**: 1 files missing
-  - Consider: lib/src/data/repository/mixins/settings_openapi_mixin.dart
+- **Add to Project B**: 3 files missing
+  - Consider: lib/src/data/repository/mixins/withdraw_openapi_mixin.dart, lib/src/domain/usecase/withdraw_usecase.dart, lib/src/domain/usecase/usecase.dart
 
 - **Add to Project A**: 2 files missing
-  - Consider: lib/src/data/repository/mixins/settings_serverpod_mixin.dart, .dart_tool/flutter_build/dart_plugin_registrant.dart
+  - Consider: lib/src/data/repository/mixins/withdraw_serverpod_mixin.dart, .dart_tool/flutter_build/dart_plugin_registrant.dart
 
 ### Quality Improvements
 
