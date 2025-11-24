@@ -602,6 +602,50 @@ class TemplateConverter {
         );
       }
 
+      // Melos script keys (web:run:fixed-port:blueprint:)
+      // Scripts와 echo 메시지에서 사용되는 프로젝트 이름은 snakeCase
+      patterns.add(
+        ReplacementPattern(
+          RegExp('web:run:fixed-port:${_escapeRegex(baseSnake)}:'),
+          'web:run:fixed-port:{{project_name.snakeCase()}}:',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('web:run:fixed-port:${_escapeRegex(baseParam)}(?=:)'),
+          'web:run:fixed-port:{{project_name.snakeCase()}}',
+        ),
+      );
+
+      // Melos run 명령어에서의 스크립트 참조
+      patterns.add(
+        ReplacementPattern(
+          RegExp('melos run web:run:fixed-port:${_escapeRegex(baseSnake)}\\b'),
+          'melos run web:run:fixed-port:{{project_name.snakeCase()}}',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('melos run web:run:fixed-port:${_escapeRegex(baseParam)}\\b'),
+          'melos run web:run:fixed-port:{{project_name.snakeCase()}}',
+        ),
+      );
+
+      // Echo 메시지 내의 프로젝트 이름 (예: "blueprint(8082)")
+      // 괄호 앞의 단독 프로젝트 이름을 snakeCase로 변환
+      patterns.add(
+        ReplacementPattern(
+          RegExp('${_escapeRegex(baseSnake)}(?=\\()'),
+          '{{project_name.snakeCase()}}',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('${_escapeRegex(baseParam)}(?=\\()'),
+          '{{project_name.snakeCase()}}',
+        ),
+      );
+
       // 문서/설정 파일 경로 패턴 (snake_case 유지)
       // backend/blueprint_client/ → backend/{{project_name.snakeCase()}}_client/
       // backend/blueprint_server/ → backend/{{project_name.snakeCase()}}_server/
