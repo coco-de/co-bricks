@@ -362,7 +362,7 @@ class FileUtils {
             );
             newPackagePath.createSync(recursive: true);
 
-            // 파일들 이동
+            // 파일과 디렉토리 재귀적으로 이동
             await for (final entity in projectPath.list()) {
               if (entity is File) {
                 final targetFile = File(
@@ -370,6 +370,15 @@ class FileUtils {
                 );
                 await entity.copy(targetFile.path);
                 await entity.delete();
+              } else if (entity is Directory) {
+                // 하위 디렉토리 재귀적으로 복사
+                final dirName = path.basename(entity.path);
+                final targetSubDir = Directory(
+                  path.join(newPackagePath.path, dirName),
+                );
+                await copyDirectory(entity, targetSubDir);
+                // 복사 후 원본 디렉토리 삭제
+                await entity.delete(recursive: true);
               }
             }
 
