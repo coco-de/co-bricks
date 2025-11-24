@@ -217,7 +217,7 @@ class SyncMonorepoService {
 
     logger.info('\n${'=' * 60}');
     logger.info('🎉 Monorepo brick synced successfully!');
-    logger.info('${'=' * 60}');
+    logger.info('=' * 60);
   }
 
   /// serverpod_backend 브릭 동기화
@@ -257,7 +257,7 @@ class SyncMonorepoService {
     final serverDirPattern = RegExp(
       r'^{{project_name\.snakeCase\(\)}}_server$',
     );
-    for (final entity in targetDir.listSync(recursive: false)) {
+    for (final entity in targetDir.listSync()) {
       if (entity is Directory) {
         final dirName = path.basename(entity.path);
         if (serverDirPattern.hasMatch(dirName)) {
@@ -290,7 +290,7 @@ class SyncMonorepoService {
     }
 
     // backend 하위 디렉토리들을 개별적으로 템플릿 이름으로 복사
-    await for (final entity in sourceBackendDir.list(recursive: false)) {
+    await for (final entity in sourceBackendDir.list()) {
       if (entity is Directory) {
         final dirName = path.basename(entity.path);
 
@@ -327,7 +327,7 @@ class SyncMonorepoService {
 
     // 파일 처리 (디렉토리 이름은 이미 변환됨)
     final stats = await _processFiles(targetDir, config, patterns);
-    convertedFiles = stats['converted'] as int;
+    convertedFiles = stats['converted']!;
 
     // passwords.yaml 파일 복원
     for (final entry in passwordsBackup.entries) {
@@ -413,7 +413,7 @@ class SyncMonorepoService {
 
         // 파일 처리
         final stats = await _processFiles(targetDir, config, patterns);
-        convertedFiles = stats['converted'] as int;
+        convertedFiles = stats['converted']!;
 
         logger.info('   ✅ $brickName brick synced:');
         logger.info('      • $convertedFiles files converted');
@@ -592,7 +592,7 @@ class SyncMonorepoService {
 
     final patterns = _getPatterns(config);
     var convertedFiles = 0;
-    var renamedDirs = 0;
+    const renamedDirs = 0;
 
     // 디렉토리 이름 변환 (하위에서 상위로)
     await _convertDirectoryNames(targetDir, config, renamedDirs);
@@ -613,7 +613,7 @@ class SyncMonorepoService {
 
     // 파일 처리 (네트워크별 mixin 파일들을 조건부 디렉토리로 변환)
     final stats = await _processFiles(targetDir, config, patterns);
-    convertedFiles = stats['converted'] as int;
+    convertedFiles = stats['converted']!;
 
     logger.info('   ✅ $dirName synced:');
     logger.info('      • $convertedFiles files converted');
@@ -691,10 +691,9 @@ class SyncMonorepoService {
       'serverpod_service': 'has_serverpod',
     };
 
-    String? lastServiceIndent;
     var foundResourcesLine = false;
 
-    for (var line in sourceLines) {
+    for (final line in sourceLines) {
       final trimmed = line.trim();
 
       // dependencies: 섹션 시작
@@ -724,7 +723,6 @@ class SyncMonorepoService {
 
         for (final entry in servicePatterns.entries) {
           final serviceName = entry.key;
-          final conditionalFlag = entry.value;
 
           // 정확한 패키지 이름 매칭 (예: "serverpod_service:")
           if (trimmed.startsWith('$serviceName:')) {
@@ -741,7 +739,6 @@ class SyncMonorepoService {
             if (!line.contains('{{#')) {
               // 들여쓰기 유지
               final indent = line.substring(0, line.indexOf(serviceName));
-              lastServiceIndent = indent;
 
               // 첫 번째 서비스를 만났을 때만 모든 서비스를 추가
               if (addedServices.isEmpty) {
@@ -863,7 +860,7 @@ class SyncMonorepoService {
 
     // Mason 조건부 디렉토리 구조
     // 1단계: {{#enable_admin}}console{{/ 디렉토리
-    const outerDirName = r'{{#enable_admin}}console{{';
+    const outerDirName = '{{#enable_admin}}console{{';
     final outerDir = Directory(path.join(featureDir.path, outerDirName));
 
     logger.info('   🔄 Converting console to conditional directory...');
@@ -882,7 +879,7 @@ class SyncMonorepoService {
     }
 
     // console 디렉토리의 내용을 innerDir로 복사 (조건부 파일 구조는 건너뜀)
-    await for (final entity in consoleDir.list(recursive: false)) {
+    await for (final entity in consoleDir.list()) {
       final entityName = path.basename(entity.path);
       final targetPath = path.join(innerDir.path, entityName);
 
@@ -897,7 +894,6 @@ class SyncMonorepoService {
         await FileUtils.copyDirectory(
           entity,
           Directory(targetPath),
-          overwrite: false, // 기존 파일 보존
         );
       } else if (entity is File) {
         await entity.copy(targetPath);
@@ -988,7 +984,6 @@ class SyncMonorepoService {
         batch.map(
           (entity) => _processSingleFile(entity, config, patterns),
         ),
-        eagerError: false,
       );
 
       // 변환된 파일 수 집계
@@ -1019,7 +1014,7 @@ class SyncMonorepoService {
           originalFileName.contains('{{#') && originalFileName.contains('{{/');
 
       // 조건부 템플릿이 포함된 파일명에서 실제 파일명 추출
-      String actualFileName = originalFileName;
+      var actualFileName = originalFileName;
       if (hasConditionalTemplate) {
         // {{#has_openapi}}...{{/has_openapi}} 패턴에서 실제 파일명 추출
         final match = RegExp(
@@ -1031,7 +1026,7 @@ class SyncMonorepoService {
       }
 
       // 파일명 변환
-      var newFileName = FileUtils.convertFileName(
+      final newFileName = FileUtils.convertFileName(
         actualFileName,
         config.projectNames,
       );
@@ -1039,7 +1034,7 @@ class SyncMonorepoService {
       // 네트워크별 mixin 파일명을 조건부 템플릿으로 변환
       // {{#has_openapi}}community_openapi_mixin.dart{{ 디렉토리를 만들고 그 안에 has_openapi}} 파일 생성
       String? conditionalDir;
-      String finalFileName = newFileName;
+      var finalFileName = newFileName;
 
       if (newFileName.endsWith('_openapi_mixin.dart') &&
           !newFileName.contains('{{#has_openapi}}')) {
@@ -1070,7 +1065,7 @@ class SyncMonorepoService {
       // conditionalDir에 실제 파일명이 들어가도록 문자열 보간 적용
       if (conditionalDir != null) {
         conditionalDir = conditionalDir.replaceAll(
-          '\$newFileName',
+          r'$newFileName',
           newFileName,
         );
       }
@@ -1081,7 +1076,7 @@ class SyncMonorepoService {
 
       if (FileUtils.shouldProcessFile(entity)) {
         if (await FileUtils.isTextFile(entity) &&
-            await FileUtils.isFileSizeValid(entity)) {
+            FileUtils.isFileSizeValid(entity)) {
           try {
             final originalContent = await entity.readAsString();
             var content = originalContent;
@@ -1296,7 +1291,8 @@ class SyncMonorepoService {
     var result = content;
 
     // 이미 조건부 템플릿이 포함되어 있으면 변환하지 않지만, 공백은 정규화
-    final hasConditionals = content.contains('{{#has_openapi}}') ||
+    final hasConditionals =
+        content.contains('{{#has_openapi}}') ||
         content.contains('{{#has_serverpod}}') ||
         content.contains('{{#has_graphql}}') ||
         content.contains('{{#has_supabase}}') ||
@@ -1305,10 +1301,14 @@ class SyncMonorepoService {
 
     if (hasConditionals) {
       // 조건부 템플릿이 있는 경우: 공백만 정규화하고 반환
-      logger.detail('Normalizing whitespace in existing conditional templates...');
+      logger.detail(
+        'Normalizing whitespace in existing conditional templates...',
+      );
 
       // dependencies: 섹션 내의 과도한 공백 제거
-      final pattern1 = RegExp(r'(resources:\s*\^[0-9.]+)\s*\n\s*\n\s*\n(\s+\{\{#has_)');
+      final pattern1 = RegExp(
+        r'(resources:\s*\^[0-9.]+)\s*\n\s*\n\s*\n(\s+\{\{#has_)',
+      );
       if (pattern1.hasMatch(result)) {
         result = result.replaceAllMapped(
           pattern1,
@@ -1410,7 +1410,9 @@ class SyncMonorepoService {
 
     // 1. dependencies: 섹션 내의 과도한 공백 제거
     // "resources: ^0.1.0\n\n\n  {{#has_openapi}}" -> "resources: ^0.1.0\n  {{#has_openapi}}"
-    final pattern1 = RegExp(r'(resources:\s*\^[0-9.]+)\s*\n\s*\n\s*\n(\s+\{\{#has_)');
+    final pattern1 = RegExp(
+      r'(resources:\s*\^[0-9.]+)\s*\n\s*\n\s*\n(\s+\{\{#has_)',
+    );
     if (pattern1.hasMatch(result)) {
       logger.detail('Found resources pattern with excessive whitespace');
       result = result.replaceAllMapped(
@@ -1622,9 +1624,9 @@ class SyncMonorepoService {
     required String docComment,
     required String className,
     required String mixinPrefix,
+    required List<Map<String, String>> daoGetters,
     String? databaseField,
     String? databaseType,
-    required List<Map<String, String>> daoGetters,
   }) {
     final buffer = StringBuffer();
     final hasDatabase =
@@ -1676,7 +1678,7 @@ class SyncMonorepoService {
 
     // Serverpod 블록
     buffer.writeln('  {{#has_serverpod}}');
-    buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
+    buffer.writeln('  /// $mixinPrefix Repository 생성자');
     if (hasDatabase) {
       buffer.writeln('  $className(');
       buffer.writeln('    this._podService,');
@@ -1703,7 +1705,7 @@ class SyncMonorepoService {
 
     // OpenAPI 블록
     buffer.writeln('  {{#has_openapi}}');
-    buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
+    buffer.writeln('  /// $mixinPrefix Repository 생성자');
     if (hasDatabase) {
       buffer.writeln('  $className(');
       buffer.writeln('    this._openApiService,');
@@ -1732,7 +1734,7 @@ class SyncMonorepoService {
 
     // GraphQL 블록
     buffer.writeln('  {{#has_graphql}}');
-    buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
+    buffer.writeln('  /// $mixinPrefix Repository 생성자');
     if (hasDatabase) {
       buffer.writeln('  $className(');
       buffer.writeln('    this._graphQLClient,');
@@ -1758,7 +1760,7 @@ class SyncMonorepoService {
 
     // Supabase 블록
     buffer.writeln('  {{#has_supabase}}');
-    buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
+    buffer.writeln('  /// $mixinPrefix Repository 생성자');
     if (hasDatabase) {
       buffer.writeln('  $className(');
       buffer.writeln('    this._supabaseClient,');
@@ -1784,7 +1786,7 @@ class SyncMonorepoService {
 
     // Firebase 블록
     buffer.writeln('  {{#has_firebase}}');
-    buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
+    buffer.writeln('  /// $mixinPrefix Repository 생성자');
     if (hasDatabase) {
       buffer.writeln('  $className(');
       buffer.writeln('    this._firebaseService,');
@@ -1814,7 +1816,7 @@ class SyncMonorepoService {
     buffer.writeln(
       '  {{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}{{^has_supabase}}{{^has_firebase}}',
     );
-    buffer.writeln('  /// ${mixinPrefix} Repository 생성자');
+    buffer.writeln('  /// $mixinPrefix Repository 생성자');
     buffer.writeln('  $className();');
     buffer.writeln(
       '  {{/has_firebase}}{{/has_supabase}}{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}',
@@ -1835,7 +1837,7 @@ class SyncMonorepoService {
       (match) {
         final indent = match.group(1) ?? '';
         final mixinName = match.group(2) ?? '';
-        return '${indent}{{#has_openapi}}with $mixinName{{/has_openapi}}';
+        return '$indent{{#has_openapi}}with $mixinName{{/has_openapi}}';
       },
     );
 
@@ -1845,7 +1847,7 @@ class SyncMonorepoService {
       (match) {
         final indent = match.group(1) ?? '';
         final varName = match.group(2) ?? '';
-        return '${indent}{{#has_openapi}}final OpenApiService $varName;{{/has_openapi}}';
+        return '$indent{{#has_openapi}}final OpenApiService $varName;{{/has_openapi}}';
       },
     );
 
@@ -1859,7 +1861,7 @@ class SyncMonorepoService {
         final indent = match.group(1) ?? '';
         final getterName = match.group(2) ?? '';
         final varName = match.group(3) ?? '';
-        return '${indent}{{#has_openapi}}OpenApiService get $getterName => $varName;{{/has_openapi}}';
+        return '$indent{{#has_openapi}}OpenApiService get $getterName => $varName;{{/has_openapi}}';
       },
     );
 
@@ -1870,7 +1872,7 @@ class SyncMonorepoService {
       (match) {
         final indent = match.group(1) ?? '';
         final mixinName = match.group(2) ?? '';
-        return '${indent}{{#has_serverpod}}with $mixinName{{/has_serverpod}}';
+        return '$indent{{#has_serverpod}}with $mixinName{{/has_serverpod}}';
       },
     );
 
@@ -1880,7 +1882,7 @@ class SyncMonorepoService {
       (match) {
         final indent = match.group(1) ?? '';
         final varName = match.group(2) ?? '';
-        return '${indent}{{#has_serverpod}}final pod.PodService $varName;{{/has_serverpod}}';
+        return '$indent{{#has_serverpod}}final pod.PodService $varName;{{/has_serverpod}}';
       },
     );
 
@@ -1894,7 +1896,7 @@ class SyncMonorepoService {
         final indent = match.group(1) ?? '';
         final getterName = match.group(2) ?? '';
         final expression = match.group(3) ?? '';
-        return '${indent}{{#has_serverpod}}pod.Client get $getterName => $expression;{{/has_serverpod}}';
+        return '$indent{{#has_serverpod}}pod.Client get $getterName => $expression;{{/has_serverpod}}';
       },
     );
 
@@ -1905,7 +1907,7 @@ class SyncMonorepoService {
       (match) {
         final indent = match.group(1) ?? '';
         final mixinName = match.group(2) ?? '';
-        return '${indent}{{#has_graphql}}with $mixinName{{/has_graphql}}';
+        return '$indent{{#has_graphql}}with $mixinName{{/has_graphql}}';
       },
     );
 
@@ -1915,7 +1917,7 @@ class SyncMonorepoService {
       (match) {
         final indent = match.group(1) ?? '';
         final varName = match.group(2) ?? '';
-        return '${indent}{{#has_graphql}}final GraphQLClient $varName;{{/has_graphql}}';
+        return '$indent{{#has_graphql}}final GraphQLClient $varName;{{/has_graphql}}';
       },
     );
 
@@ -1929,7 +1931,7 @@ class SyncMonorepoService {
         final indent = match.group(1) ?? '';
         final getterName = match.group(2) ?? '';
         final varName = match.group(3) ?? '';
-        return '${indent}{{#has_graphql}}GraphQLClient get $getterName => $varName;{{/has_graphql}}';
+        return '$indent{{#has_graphql}}GraphQLClient get $getterName => $varName;{{/has_graphql}}';
       },
     );
 
@@ -1942,7 +1944,7 @@ class SyncMonorepoService {
       ),
       (match) {
         final indent = match.group(1) ?? '';
-        return '${indent}{{#has_openapi}}/// REST API를 통해 실제 백엔드와 통신{{/has_openapi}}';
+        return '$indent{{#has_openapi}}/// REST API를 통해 실제 백엔드와 통신{{/has_openapi}}';
       },
     );
 
@@ -1954,7 +1956,7 @@ class SyncMonorepoService {
       ),
       (match) {
         final indent = match.group(1) ?? '';
-        return '${indent}{{#has_serverpod}}/// Serverpod Client를 통해 실제 백엔드 API와 통신{{/has_serverpod}}';
+        return '$indent{{#has_serverpod}}/// Serverpod Client를 통해 실제 백엔드 API와 통신{{/has_serverpod}}';
       },
     );
 
@@ -1966,7 +1968,7 @@ class SyncMonorepoService {
       ),
       (match) {
         final indent = match.group(1) ?? '';
-        return '${indent}{{#has_graphql}}/// GraphQL을 통해 실제 백엔드와 통신{{/has_graphql}}';
+        return '$indent{{#has_graphql}}/// GraphQL을 통해 실제 백엔드와 통신{{/has_graphql}}';
       },
     );
 
@@ -1978,7 +1980,7 @@ class SyncMonorepoService {
       ),
       (match) {
         final indent = match.group(1) ?? '';
-        return '${indent}{{#has_supabase}}/// Supabase를 통해 실제 백엔드와 통신{{/has_supabase}}';
+        return '$indent{{#has_supabase}}/// Supabase를 통해 실제 백엔드와 통신{{/has_supabase}}';
       },
     );
 
@@ -1990,7 +1992,7 @@ class SyncMonorepoService {
       ),
       (match) {
         final indent = match.group(1) ?? '';
-        return '${indent}{{#has_firebase}}/// Firebase를 통해 실제 백엔드와 통신{{/has_firebase}}';
+        return '$indent{{#has_firebase}}/// Firebase를 통해 실제 백엔드와 통신{{/has_firebase}}';
       },
     );
 
@@ -1999,7 +2001,7 @@ class SyncMonorepoService {
       RegExp(r'^(\s*)///\s*메모리에서\s+데이터를\s+생성하고\s+관리\s*$', multiLine: true),
       (match) {
         final indent = match.group(1) ?? '';
-        return '${indent}{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}{{^has_supabase}}{{^has_firebase}}/// 메모리에서 데이터를 생성하고 관리{{/has_firebase}}{{/has_supabase}}{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}';
+        return '$indent{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}{{^has_supabase}}{{^has_firebase}}/// 메모리에서 데이터를 생성하고 관리{{/has_firebase}}{{/has_supabase}}{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}';
       },
     );
 
@@ -2079,7 +2081,7 @@ class SyncMonorepoService {
             .join('\n');
 
         // 생성자 주석도 포함하여 변환
-        return '${indent}{{#has_openapi}}\n$indent/// ${className.replaceAll('Repository', '')} Repository 생성자\n$indent$className(\n$indentedBody\n$indent);\n${indent}{{/has_openapi}}';
+        return '$indent{{#has_openapi}}\n$indent/// ${className.replaceAll('Repository', '')} Repository 생성자\n$indent$className(\n$indentedBody\n$indent);\n$indent{{/has_openapi}}';
       }
       return fullMatch;
     });
@@ -2115,7 +2117,7 @@ class SyncMonorepoService {
             .join('\n');
 
         // 생성자 주석도 포함하여 변환
-        return '${indent}{{#has_serverpod}}\n$indent/// ${className.replaceAll('Repository', '')} Repository 생성자\n$indent$className(\n$indentedBody\n$indent);\n${indent}{{/has_serverpod}}';
+        return '$indent{{#has_serverpod}}\n$indent/// ${className.replaceAll('Repository', '')} Repository 생성자\n$indent$className(\n$indentedBody\n$indent);\n$indent{{/has_serverpod}}';
       }
       return fullMatch;
     });
@@ -2124,14 +2126,14 @@ class SyncMonorepoService {
     result = result.replaceAllMapped(graphqlConstructorPattern, (match) {
       final indent = match.group(1) ?? '';
       final className = match.group(2) ?? '';
-      return '${indent}{{#has_graphql}}\n$indent$className(this._graphQLClient);\n${indent}{{/has_graphql}}';
+      return '$indent{{#has_graphql}}\n$indent$className(this._graphQLClient);\n$indent{{/has_graphql}}';
     });
 
     // 빈 생성자 변환
     result = result.replaceAllMapped(emptyConstructorPattern, (match) {
       final indent = match.group(1) ?? '';
       final className = match.group(2) ?? '';
-      return '${indent}{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}\n$indent$className();\n${indent}{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}';
+      return '$indent{{^has_serverpod}}{{^has_openapi}}{{^has_graphql}}\n$indent$className();\n$indent{{/has_graphql}}{{/has_openapi}}{{/has_serverpod}}';
     });
 
     return result;
@@ -2321,8 +2323,12 @@ class SyncMonorepoService {
         // resources 패키지 처리 - 다음 라인에 백엔드 서비스 패키지들 추가
         if (line.contains('package/resources')) {
           result.add('  - package/resources');
-          result.add('  {{#has_serverpod}}- package/serverpod_service{{/has_serverpod}}');
-          result.add('  {{#has_openapi}}- package/openapi_service{{/has_openapi}}');
+          result.add(
+            '  {{#has_serverpod}}- package/serverpod_service{{/has_serverpod}}',
+          );
+          result.add(
+            '  {{#has_openapi}}- package/openapi_service{{/has_openapi}}',
+          );
           result.add('  {{#has_openapi}}- package/openapi{{/has_openapi}}');
           continue;
         }
@@ -2419,7 +2425,6 @@ class SyncMonorepoService {
     final result = <String>[];
     var inBuildSelectIgnore = false;
     var ignoreIndent = '';
-    var lastIgnoreLineIndex = -1;
 
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i];
@@ -2462,7 +2467,6 @@ class SyncMonorepoService {
             trimmed.contains('"firebase_service"')) {
           continue; // 정적 항목은 건너뛰고 조건부로만 추가
         }
-        lastIgnoreLineIndex = result.length;
       }
 
       // ignore 목록이 끝나는 시점 감지 (dependsOn:)
@@ -2539,7 +2543,6 @@ class SyncMonorepoService {
     // 첫 번째 그룹: jaspr 관련 (jaspr ~ jaspr_serverpod)
     const firstServerpodGroupEnd = 'jaspr_serverpod:';
     // 두 번째 그룹: serverpod 코어 (serverpod ~ serverpod_serialization)
-    const secondServerpodGroupStart = 'serverpod:';
     final lastServerpodPackages = [
       'serverpod_serialization:',
       'serverpod_test:',

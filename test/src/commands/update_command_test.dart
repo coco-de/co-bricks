@@ -1,12 +1,12 @@
 import 'dart:io';
 
+import 'package:co_bricks/src/command_runner.dart';
+import 'package:co_bricks/src/commands/commands.dart';
+import 'package:co_bricks/src/version.dart';
 import 'package:mason_logger/mason_logger.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:pub_updater/pub_updater.dart';
 import 'package:test/test.dart';
-import 'package:co_bricks/src/command_runner.dart';
-import 'package:co_bricks/src/commands/commands.dart';
-import 'package:co_bricks/src/version.dart';
 
 class _MockLogger extends Mock implements Logger {}
 

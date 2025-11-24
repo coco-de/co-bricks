@@ -4,10 +4,8 @@ import 'dart:math';
 import 'package:args/command_runner.dart';
 import 'package:co_bricks/src/models/project_config.dart' as model;
 import 'package:co_bricks/src/services/project_config_service.dart';
+import 'package:co_bricks/src/services/services.dart';
 import 'package:mason/mason.dart' hide packageVersion;
-import 'package:mason_logger/mason_logger.dart';
-
-import '../services/services.dart';
 
 /// {@template create_from_config_command}
 /// `co_bricks create-from-config` command which creates projects from saved JSON configs.
@@ -181,7 +179,7 @@ class CreateFromConfigCommand extends Command<int> {
       );
 
       // Handle auto-start
-      var autoStart = argResults!.wasParsed('auto-start')
+      final autoStart = argResults!.wasParsed('auto-start')
           ? argResults!['auto-start'] as bool
           : config.autoStart;
 

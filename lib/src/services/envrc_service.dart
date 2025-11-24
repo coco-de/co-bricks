@@ -115,35 +115,25 @@ class EnvrcService {
         switch (key) {
           case 'PROJECT_NAME':
             projectName = value;
-            break;
           case 'PROJECT_NAME_SNAKE':
             projectNameSnake = value;
-            break;
           case 'ORG_NAME':
             orgName = value;
-            break;
           case 'ORG_TLD':
           case 'TLD':
             orgTld = value;
-            break;
           case 'GITHUB_ORG':
             githubOrg = value;
-            break;
           case 'GITHUB_REPO':
             githubRepo = value;
-            break;
           case 'RANDOM_PROJECT_ID':
             randomProjectId = value;
-            break;
           case 'APPLE_DEVELOPER_ID':
             appleDeveloperId = value;
-            break;
           case 'TEAM_ID':
             teamId = value;
-            break;
           case 'ITC_TEAM_ID':
             itcTeamId = value;
-            break;
         }
       }
     }

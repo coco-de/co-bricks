@@ -1,12 +1,11 @@
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
-import 'package:mason_logger/mason_logger.dart';
-import 'package:path/path.dart' as path;
-
 import 'package:co_bricks/src/services/envrc_service.dart';
 import 'package:co_bricks/src/services/sync_app_service.dart';
 import 'package:co_bricks/src/services/sync_monorepo_service.dart';
+import 'package:mason_logger/mason_logger.dart';
+import 'package:path/path.dart' as path;
 
 /// {@template sync_command}
 ///
@@ -88,10 +87,8 @@ class SyncCommand extends Command<int> {
       switch (type) {
         case 'app':
           await _syncAppService.sync(config, projectDir);
-          break;
         case 'monorepo':
           await _syncMonorepoService.sync(config, projectDir);
-          break;
         default:
           _logger.err('Invalid type: $type. Use "app" or "monorepo"');
           return ExitCode.usage.code;

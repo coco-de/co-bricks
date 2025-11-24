@@ -145,7 +145,6 @@ Run "make start" to initialize the project now? (Y/n)
 ```sh
 $ co-bricks create --type monorepo --no-interactive \
   --name good_teacher \
-  --project-shortcut gt \
   --description "Good Teacher App" \
   --organization laputa \
   --tld im \
@@ -176,7 +175,6 @@ $ co-bricks create --type monorepo --no-interactive \
 $ co-bricks create --type monorepo --auto-start \
   --no-interactive \
   --name good_teacher \
-  --project-shortcut gt \
   --description "Good Teacher App" \
   # ... (나머지 옵션)
 ```

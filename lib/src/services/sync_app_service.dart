@@ -155,8 +155,8 @@ class SyncAppService {
 
     // 파일 처리
     final stats = await _processFiles(targetBrickDir, config, patterns);
-    convertedFiles = stats['converted'] as int;
-    renamedFiles = stats['renamed'] as int;
+    convertedFiles = stats['converted']!;
+    renamedFiles = stats['renamed']!;
 
     logger.info('   ✅ Conversion completed:');
     logger.info('      - $convertedFiles files converted');
@@ -195,12 +195,12 @@ class SyncAppService {
           await entity.rename(newPath.path);
           renamedFiles++;
           final subStats = await _processFiles(newPath, config, patterns);
-          convertedFiles += subStats['converted'] as int;
-          renamedFiles += subStats['renamed'] as int;
+          convertedFiles += subStats['converted']!;
+          renamedFiles += subStats['renamed']!;
         } else {
           final subStats = await _processFiles(entity, config, patterns);
-          convertedFiles += subStats['converted'] as int;
-          renamedFiles += subStats['renamed'] as int;
+          convertedFiles += subStats['converted']!;
+          renamedFiles += subStats['renamed']!;
         }
       } else if (entity is File) {
         // 파일명 변환
@@ -356,7 +356,7 @@ class SyncAppService {
 
     logger.info('\n${'=' * 60}');
     logger.info('🎉 $syncedCount app brick(s) synced successfully!');
-    logger.info('${'=' * 60}');
+    logger.info('=' * 60);
 
     logger.info('\n📝 Synced Bricks:');
     for (final syncConfig in syncConfigs) {
@@ -549,7 +549,7 @@ class SyncAppService {
     Directory source,
     Directory target,
   ) async {
-    await for (final entity in source.list(recursive: false)) {
+    await for (final entity in source.list()) {
       if (entity is File) {
         final targetFile = File(
           path.join(target.path, path.basename(entity.path)),

@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:co_bricks/src/services/envrc_service.dart';
 
 /// 템플릿 변환 패턴
@@ -753,13 +751,13 @@ class TemplateConverter {
       patterns.add(
         ReplacementPattern(
           RegExp('jdbc:postgresql://([^/]+)/${_escapeRegex(baseSnake)}\\b'),
-          'jdbc:postgresql://\$1/{{project_name.paramCase()}}',
+          r'jdbc:postgresql://$1/{{project_name.paramCase()}}',
         ),
       );
       patterns.add(
         ReplacementPattern(
           RegExp('jdbc:postgresql://([^/]+)/${_escapeRegex(baseParam)}\\b'),
-          'jdbc:postgresql://\$1/{{project_name.paramCase()}}',
+          r'jdbc:postgresql://$1/{{project_name.paramCase()}}',
         ),
       );
 
@@ -1193,7 +1191,7 @@ class TemplateConverter {
                           : word[0].toUpperCase() +
                                 word.substring(1).toLowerCase(),
                     )
-                    .join('');
+                    .join();
 
       // pascalCase: HelloWorld (모든 단어 첫 글자 대문자)
       final basePascal = words
@@ -1202,7 +1200,7 @@ class TemplateConverter {
                 ? ''
                 : word[0].toUpperCase() + word.substring(1).toLowerCase(),
           )
-          .join('');
+          .join();
 
       // titleCase: Hello World (모든 단어 첫 글자 대문자, 공백으로 구분)
       final baseTitle = words
@@ -1360,8 +1358,8 @@ class TemplateConverter {
         // _Fake + PascalCase + Suffix + _숫자
         patterns.add(
           ReplacementPattern(
-            RegExp('_Fake${_escapeRegex(basePascal)}$suffix' + r'(_\d+)\b'),
-            '_FakeApp$suffix' + r'$1',
+            RegExp('_Fake${_escapeRegex(basePascal)}$suffix' r'(_\d+)\b'),
+            '_FakeApp$suffix' r'$1',
           ),
         );
       }

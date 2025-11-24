@@ -47,7 +47,7 @@ class FileUtils {
     // 경로 기반 제외 (filePath가 제공된 경우)
     if (filePath != null) {
       // 정규화된 경로 사용 (윈도우 호환)
-      final normalizedPath = filePath.replaceAll('\\', '/');
+      final normalizedPath = filePath.replaceAll(r'\', '/');
 
       // 테스트 Mock 파일 제외: **/test/**/*.mocks.dart
       if (normalizedPath.contains('/test/') &&
@@ -183,7 +183,7 @@ class FileUtils {
       );
     }
 
-    await for (final entity in source.list(recursive: false)) {
+    await for (final entity in source.list()) {
       final targetPath = path.join(target.path, path.basename(entity.path));
 
       if (entity is Directory) {

@@ -4,10 +4,8 @@ import 'dart:math';
 import 'package:args/command_runner.dart';
 import 'package:co_bricks/src/models/project_config.dart' as model;
 import 'package:co_bricks/src/services/project_config_service.dart';
+import 'package:co_bricks/src/services/services.dart';
 import 'package:mason/mason.dart' hide packageVersion;
-import 'package:mason_logger/mason_logger.dart';
-
-import '../services/services.dart';
 
 /// {@template create_command}
 /// `co_bricks create` command which creates new projects using Mason bricks.
@@ -135,17 +133,15 @@ class CreateCommand extends Command<int> {
         abbr: 'i',
         help: 'Run in interactive mode (prompts for all values)',
         defaultsTo: true,
-        negatable: true,
       )
       ..addFlag(
         'auto-start',
         help: 'Automatically run "make start" after project creation',
-        defaultsTo: false,
       )
       ..addFlag(
         'save-config',
-        help: 'Save project configuration to projects/ directory for later reuse',
-        defaultsTo: false,
+        help:
+            'Save project configuration to projects/ directory for later reuse',
       );
   }
 
@@ -279,7 +275,7 @@ class CreateCommand extends Command<int> {
     final vars = <String, dynamic>{};
 
     // Project name (required)
-    String? projectName = argResults!['name'] as String?;
+    var projectName = argResults!['name'] as String?;
     if (projectName == null || projectName.isEmpty) {
       if (interactive) {
         projectName = _logger.prompt('Project name:');
@@ -291,12 +287,8 @@ class CreateCommand extends Command<int> {
     }
     vars['project_name'] = projectName;
 
-    // Project shortcut (auto-generated from first 2 letters)
-    vars['project_shortcut'] =
-        projectName.substring(0, projectName.length.clamp(0, 2));
-
     // Description
-    String? description = argResults!['description'] as String?;
+    var description = argResults!['description'] as String?;
     if (interactive && (description == null || description.isEmpty)) {
       description = _logger.prompt(
         'Project description:',
@@ -306,7 +298,7 @@ class CreateCommand extends Command<int> {
     vars['description'] = description ?? 'A new monorepo project';
 
     // Organization/Company name
-    String? organization = argResults!['organization'] as String?;
+    var organization = argResults!['organization'] as String?;
     if (interactive && (organization == null || organization.isEmpty)) {
       organization = _logger.prompt(
         'Organization/Company name:',
@@ -316,21 +308,21 @@ class CreateCommand extends Command<int> {
     vars['org_name'] = organization ?? _toTitleCase(projectName);
 
     // TLD
-    String tld = argResults!['tld'] as String;
+    var tld = argResults!['tld'] as String;
     if (interactive) {
       tld = _logger.prompt('Top-level domain:', defaultValue: tld);
     }
     vars['tld'] = tld;
 
     // Org TLD
-    String orgTld = argResults!['org-tld'] as String;
+    var orgTld = argResults!['org-tld'] as String;
     if (interactive) {
       orgTld = _logger.prompt('Organization TLD:', defaultValue: orgTld);
     }
     vars['org_tld'] = orgTld;
 
     // GitHub organization
-    String? githubOrg = argResults!['github-org'] as String?;
+    var githubOrg = argResults!['github-org'] as String?;
     if (interactive && (githubOrg == null || githubOrg.isEmpty)) {
       githubOrg = _logger.prompt(
         'GitHub organization:',
@@ -341,7 +333,7 @@ class CreateCommand extends Command<int> {
         githubOrg ?? projectName.toLowerCase().replaceAll('_', '-');
 
     // GitHub repository
-    String? githubRepo = argResults!['github-repo'] as String?;
+    var githubRepo = argResults!['github-repo'] as String?;
     if (interactive && (githubRepo == null || githubRepo.isEmpty)) {
       githubRepo = _logger.prompt(
         'GitHub repository:',
@@ -352,7 +344,7 @@ class CreateCommand extends Command<int> {
         githubRepo ?? projectName.toLowerCase().replaceAll('_', '-');
 
     // GitHub visibility
-    String githubVisibility = argResults!['github-visibility'] as String;
+    var githubVisibility = argResults!['github-visibility'] as String;
     if (interactive) {
       githubVisibility = _logger.chooseOne(
         'GitHub repository visibility:',
@@ -366,7 +358,7 @@ class CreateCommand extends Command<int> {
     vars['randomprojectid'] = _generateRandomId();
 
     // Backend selection
-    String backend = argResults!['backend'] as String;
+    var backend = argResults!['backend'] as String;
     if (interactive) {
       backend = _logger.chooseOne(
         'Select backend type:',
@@ -383,7 +375,7 @@ class CreateCommand extends Command<int> {
     vars['has_firebase'] = backend == 'firebase';
 
     // Admin email
-    String? adminEmail = argResults!['admin-email'] as String?;
+    var adminEmail = argResults!['admin-email'] as String?;
     if (interactive && (adminEmail == null || adminEmail.isEmpty)) {
       adminEmail = _logger.prompt(
         'Administrator email:',
@@ -411,7 +403,7 @@ class CreateCommand extends Command<int> {
     vars['enable_admin'] = enableAdmin;
 
     // Apple Developer ID
-    String? appleDeveloperId = argResults!['apple-developer-id'] as String?;
+    var appleDeveloperId = argResults!['apple-developer-id'] as String?;
     if (interactive && (appleDeveloperId == null || appleDeveloperId.isEmpty)) {
       appleDeveloperId = _logger.prompt(
         'Apple Developer ID (email):',
@@ -421,7 +413,7 @@ class CreateCommand extends Command<int> {
     vars['apple_developer_id'] = appleDeveloperId ?? '';
 
     // ITC Team ID
-    String? itcTeamId = argResults!['itc-team-id'] as String?;
+    var itcTeamId = argResults!['itc-team-id'] as String?;
     if (interactive && (itcTeamId == null || itcTeamId.isEmpty)) {
       itcTeamId = _logger.prompt(
         'App Store Connect Team ID:',
@@ -431,7 +423,7 @@ class CreateCommand extends Command<int> {
     vars['itc_team_id'] = itcTeamId ?? '';
 
     // Team ID
-    String? teamId = argResults!['team-id'] as String?;
+    var teamId = argResults!['team-id'] as String?;
     if (interactive && (teamId == null || teamId.isEmpty)) {
       teamId = _logger.prompt(
         'Developer Portal Team ID:',
@@ -441,7 +433,7 @@ class CreateCommand extends Command<int> {
     vars['team_id'] = teamId ?? '';
 
     // Certificate variables
-    String? certCn = argResults!['cert-cn'] as String?;
+    var certCn = argResults!['cert-cn'] as String?;
     if (interactive && (certCn == null || certCn.isEmpty)) {
       certCn = _logger.prompt(
         'Certificate Common Name:',
@@ -450,7 +442,7 @@ class CreateCommand extends Command<int> {
     }
     vars['cert_cn'] = certCn ?? (organization ?? _toTitleCase(projectName));
 
-    String? certOu = argResults!['cert-ou'] as String?;
+    var certOu = argResults!['cert-ou'] as String?;
     if (interactive && (certOu == null || certOu.isEmpty)) {
       certOu = _logger.prompt(
         'Certificate Organizational Unit:',
@@ -459,7 +451,7 @@ class CreateCommand extends Command<int> {
     }
     vars['cert_ou'] = certOu ?? 'Production';
 
-    String? certO = argResults!['cert-o'] as String?;
+    var certO = argResults!['cert-o'] as String?;
     if (interactive && (certO == null || certO.isEmpty)) {
       certO = _logger.prompt(
         'Certificate Organization:',
@@ -468,7 +460,7 @@ class CreateCommand extends Command<int> {
     }
     vars['cert_o'] = certO ?? (organization ?? _toTitleCase(projectName));
 
-    String? certL = argResults!['cert-l'] as String?;
+    var certL = argResults!['cert-l'] as String?;
     if (interactive && (certL == null || certL.isEmpty)) {
       certL = _logger.prompt(
         'Certificate Locality/City:',
@@ -477,7 +469,7 @@ class CreateCommand extends Command<int> {
     }
     vars['cert_l'] = certL ?? 'Seoul';
 
-    String? certSt = argResults!['cert-st'] as String?;
+    var certSt = argResults!['cert-st'] as String?;
     if (interactive && (certSt == null || certSt.isEmpty)) {
       certSt = _logger.prompt(
         'Certificate State/Province:',
@@ -486,7 +478,7 @@ class CreateCommand extends Command<int> {
     }
     vars['cert_st'] = certSt ?? 'Seoul';
 
-    String? certC = argResults!['cert-c'] as String?;
+    var certC = argResults!['cert-c'] as String?;
     if (interactive && (certC == null || certC.isEmpty)) {
       certC = _logger.prompt(
         'Certificate Country Code (2 letters):',
@@ -496,7 +488,7 @@ class CreateCommand extends Command<int> {
     vars['cert_c'] = certC ?? 'KR';
 
     // AWS credentials
-    String? awsAccessKeyId = argResults!['aws-access-key-id'] as String?;
+    var awsAccessKeyId = argResults!['aws-access-key-id'] as String?;
     if (interactive && (awsAccessKeyId == null || awsAccessKeyId.isEmpty)) {
       awsAccessKeyId = _logger.prompt(
         'AWS Access Key ID:',
@@ -505,7 +497,7 @@ class CreateCommand extends Command<int> {
     }
     vars['aws_access_key_id'] = awsAccessKeyId ?? '';
 
-    String? awsSecretAccessKey =
+    var awsSecretAccessKey =
         argResults!['aws-secret-access-key'] as String?;
     if (interactive &&
         (awsSecretAccessKey == null || awsSecretAccessKey.isEmpty)) {
