@@ -646,6 +646,21 @@ class TemplateConverter {
         ),
       );
 
+      // Description 내의 프로젝트 이름 (예: description: "blueprint 웹 앱을...")
+      // description 문자열 내에서도 snakeCase 사용
+      patterns.add(
+        ReplacementPattern(
+          RegExp('description:\\s*"${_escapeRegex(baseParam)}\\s'),
+          'description: "{{project_name.snakeCase()}} ',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('description:\\s*"${_escapeRegex(baseSnake)}\\s'),
+          'description: "{{project_name.snakeCase()}} ',
+        ),
+      );
+
       // 문서/설정 파일 경로 패턴 (snake_case 유지)
       // backend/blueprint_client/ → backend/{{project_name.snakeCase()}}_client/
       // backend/blueprint_server/ → backend/{{project_name.snakeCase()}}_server/

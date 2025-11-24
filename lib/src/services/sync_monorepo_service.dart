@@ -2440,21 +2440,27 @@ class SyncMonorepoService {
           continue;
         }
 
-        // Backend 빌드 라인 감지 (단일 라인 조건부 처리)
+        // Shared 빌드 라인 감지 (블록 전체를 조건부로 감싸기)
+        if (!inConsoleBuildBlock &&
+            line.contains('echo') &&
+            line.contains('Shared') &&
+            line.contains('dependBuild:shared')) {
+          // Shared 빌드 라인 전체를 조건부 태그로 감싸기
+          final patterns = _getPatterns(config);
+          line = TemplateConverter.convertContent(line, patterns);
+          result.add('{{#has_serverpod}}$line{{/has_serverpod}}');
+          continue;
+        }
+
+        // Backend 빌드 라인 감지 (블록 전체를 조건부로 감싸기)
         if (!inConsoleBuildBlock &&
             line.contains('echo') &&
             line.contains('Backend') &&
             line.contains('dependBuild:backend')) {
-          // Backend 빌드 라인 끝에 조건부 태그 추가
+          // Backend 빌드 라인 전체를 조건부 태그로 감싸기
           final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
-          // 라인 끝의 & 뒤에 조건부 태그 추가
-          if (line.endsWith('&')) {
-            result.add('$line{{#has_serverpod}}');
-          } else {
-            result.add(line);
-          }
-          result.add('{{/has_serverpod}}');
+          result.add('{{#has_serverpod}}$line{{/has_serverpod}}');
           continue;
         }
 
