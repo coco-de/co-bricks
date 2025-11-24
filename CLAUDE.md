@@ -19,7 +19,6 @@ dart run bin/co_bricks.dart create --type monorepo
 ```bash
 dart run bin/co_bricks.dart create --type monorepo --no-interactive \
   --name good_teacher \
-  --project-shortcut gt \
   --description "Good Teacher App" \
   --organization laputa \
   --tld im \
@@ -65,7 +64,6 @@ dart run bin/co_bricks.dart sync --type app --project-dir template/good_teacher
 ```bash
 dart run bin/co_bricks.dart create --type monorepo \
   --name blueprint \
-  --project-shortcut bp \
   --description "Blueprint project" \
   --organization Cocode \
   --save-config  # This saves the configuration to projects/blueprint.json
@@ -95,7 +93,6 @@ Configurations are stored in `projects/` directory as JSON files. You can manual
 {
   "type": "monorepo",
   "name": "blueprint",
-  "project_shortcut": "bp",
   "description": "Blueprint - Cocode's service blueprint implementation",
   "organization": "Cocode",
   "tld": "im",
@@ -110,6 +107,83 @@ Configurations are stored in `projects/` directory as JSON files. You can manual
   "auto_start": false
 }
 ```
+
+### Diff Detection (Feature Comparison)
+
+**Detect differences between project implementations**:
+
+The diff detection engine compares features across multiple projects to identify:
+- File structure differences
+- Repository interface compatibility
+- Implementation quality metrics
+- Code patterns and best practices
+
+**Compare a single feature**:
+```bash
+# Basic structural comparison
+dart run bin/co_bricks.dart diff \
+  --project-a template/good-teacher \
+  --project-b template/blueprint \
+  --feature auth
+
+# With full quality analysis
+dart run bin/co_bricks.dart diff \
+  --project-a template/good-teacher \
+  --project-b template/blueprint \
+  --feature auth \
+  --full-analysis
+```
+
+**Compare all features**:
+```bash
+# All features with summary report
+dart run bin/co_bricks.dart diff \
+  --project-a template/good-teacher \
+  --project-b template/blueprint \
+  --all-features \
+  --output claudedocs/diff-reports
+
+# With quality analysis for all features
+dart run bin/co_bricks.dart diff \
+  --project-a template/good-teacher \
+  --project-b template/blueprint \
+  --all-features \
+  --full-analysis
+```
+
+**Analysis Components**:
+
+1. **Structural Diff** (FeatureDiffer):
+   - Compares file structures across feature directories
+   - Identifies common, unique, and missing files
+   - Filters by layer (domain, data, presentation)
+
+2. **Interface Analysis** (InterfaceAnalyzer):
+   - Compares Repository interface method signatures using AST
+   - Detects signature conflicts (same method, different return type/parameters)
+   - Identifies missing methods in either project
+
+3. **Quality Analysis** (QualityAnalyzer) - Optional with `--full-analysis`:
+   - Error handling quality (try-catch patterns, specific exception types)
+   - Caching strategy implementation
+   - Logging coverage
+   - Code complexity metrics (methods per line)
+
+4. **Report Generation** (DiffReporter):
+   - Comprehensive Markdown reports in `claudedocs/` or specified output directory
+   - Executive summary with key metrics
+   - Detailed analysis by section
+   - Actionable recommendations for sync/merge
+
+**Report Location**:
+- Individual feature reports: `claudedocs/{feature}-diff-report.md`
+- Summary report (--all-features): `claudedocs/features-summary.md`
+
+**Use Cases**:
+- Pre-sync analysis before syncing features to bricks
+- Quality comparison between openapi and serverpod implementations
+- Migration planning (identify missing features to port)
+- Best practice identification (which implementation has better patterns)
 
 ### Testing
 
