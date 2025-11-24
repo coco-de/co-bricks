@@ -4,6 +4,7 @@ import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
+import 'package:path/path.dart' as path;
 
 /// 메서드 시그니처 정보
 class MethodSignature {
@@ -174,16 +175,19 @@ class InterfaceAnalyzer {
       return [];
     }
 
-    // Analysis Context 생성
+    // Analysis Context 생성 (absolute normalized path 사용)
+    final absoluteParentPath = path.normalize(file.parent.absolute.path);
+    final absoluteFilePath = path.normalize(file.absolute.path);
+
     final collection = AnalysisContextCollection(
-      includedPaths: [file.parent.path],
+      includedPaths: [absoluteParentPath],
     );
 
-    final context = collection.contextFor(file.path);
+    final context = collection.contextFor(absoluteFilePath);
     final session = context.currentSession;
 
-    // 파일 분석
-    final result = await session.getResolvedUnit(file.path);
+    // 파일 분석 (absolute path 사용)
+    final result = await session.getResolvedUnit(absoluteFilePath);
 
     if (result is! ResolvedUnitResult) {
       return [];

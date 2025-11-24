@@ -573,6 +573,12 @@ class DiffCommand extends Command<int> {
       }
     }
 
+    // Create output directory if it doesn't exist
+    final outputDirectory = Directory(outputDir);
+    if (!outputDirectory.existsSync()) {
+      await outputDirectory.create(recursive: true);
+    }
+
     // Create simple baseline report
     final reportPath = path.join(
       outputDir,
