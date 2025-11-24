@@ -396,6 +396,51 @@ class TemplateConverter {
         );
       }
 
+      // Docker 컨테이너 이름 패턴 (snake_case 사용)
+      // docker exec -it project_name_postgres → docker exec -it {{project_name.snakeCase()}}_postgres
+      for (final suffix in [
+        '_postgres',
+        '_redis',
+        '_server',
+        '_client',
+      ]) {
+        // docker exec -it pattern (snake_case 유지)
+        patterns.add(
+          ReplacementPattern(
+            RegExp('docker exec -it ${_escapeRegex(baseSnake)}$suffix'),
+            'docker exec -it {{project_name.snakeCase()}}$suffix',
+          ),
+        );
+        // docker exec -it pattern (param-case를 snake_case로 변환)
+        final paramSuffix = suffix.replaceAll('_', '-');
+        patterns.add(
+          ReplacementPattern(
+            RegExp('docker exec -it ${_escapeRegex(baseParam)}$paramSuffix'),
+            'docker exec -it {{project_name.snakeCase()}}$suffix',
+          ),
+        );
+      }
+
+      // PostgreSQL 데이터베이스명 패턴 (docker exec psql -d 컨텍스트)
+      // psql -U postgres -d blueprint → psql -U postgres -d {{project_name.paramCase()}}
+      for (final suffix in ['', '_test', '_dev', '_development']) {
+        final paramSuffix = suffix.replaceAll('_', '-');
+        // snake_case 데이터베이스명
+        patterns.add(
+          ReplacementPattern(
+            RegExp('psql -U postgres -d ${_escapeRegex(baseSnake)}$suffix\\b'),
+            'psql -U postgres -d {{project_name.paramCase()}}$paramSuffix',
+          ),
+        );
+        // param-case 데이터베이스명
+        patterns.add(
+          ReplacementPattern(
+            RegExp('psql -U postgres -d ${_escapeRegex(baseParam)}$paramSuffix\\b'),
+            'psql -U postgres -d {{project_name.paramCase()}}$paramSuffix',
+          ),
+        );
+      }
+
       // Serverpod generator.yaml 파일 패턴 (snake_case 유지)
       // client_package_path는 Dart 패키지 경로이므로 snake_case 사용
       // 예: client_package_path: ../blueprint_client →
@@ -505,6 +550,36 @@ class TemplateConverter {
           ),
         );
       }
+
+      // Melos scope 패턴 - 프로젝트 이름 자체 (suffix 없이)
+      // scope: "blueprint" → scope: "{{project_name.snakeCase()}}"
+      patterns.add(
+        ReplacementPattern(
+          RegExp('scope:\\s*"${_escapeRegex(baseSnake)}"'),
+          'scope: "{{project_name.snakeCase()}}"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('scope:\\s*"${_escapeRegex(baseParam)}"'),
+          'scope: "{{project_name.snakeCase()}}"',
+        ),
+      );
+
+      // Melos CLI flag patterns (--scope blueprint)
+      // --scope blueprint → --scope {{project_name.snakeCase()}} (단독, suffix 없이)
+      patterns.add(
+        ReplacementPattern(
+          RegExp('--scope\\s+${_escapeRegex(baseSnake)}\\b'),
+          '--scope {{project_name.snakeCase()}}',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('--scope\\s+${_escapeRegex(baseParam)}\\b'),
+          '--scope {{project_name.snakeCase()}}',
+        ),
+      );
 
       // Melos CLI flag patterns (--scope blueprint_console)
       // melos exec --scope blueprint_console → melos exec --scope {{project_name.snakeCase()}}_console

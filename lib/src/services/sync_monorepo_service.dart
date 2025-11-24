@@ -2226,6 +2226,7 @@ class SyncMonorepoService {
     var inScriptsSection = false;
     var inEnableAdminBlock = false;
     var inHasServerpodBlock = false;
+    var inConsoleBuildBlock = false;
     var scriptIndent = '';
 
     for (var i = 0; i < lines.length; i++) {
@@ -2393,17 +2394,67 @@ class SyncMonorepoService {
           }
         }
 
-        // console 관련 echo 라인 감지 (단일 라인 조건부 처리)
-        if (line.contains('echo') &&
-            (line.contains('console_router') ||
-                (line.contains('Console') &&
-                    line.contains('dependBuild:feature:console')))) {
+        // Console 빌드 블록 시작 감지 (# ⚡ 3.5단계: Console 패키지들 빌드)
+        if (!inConsoleBuildBlock &&
+            line.contains('Console 패키지들 빌드') &&
+            line.contains('3.5단계')) {
+          inConsoleBuildBlock = true;
+          // 먼저 {{#enable_admin}} 태그 추가
+          result.add('{{#enable_admin}}');
+          // 그 다음 현재 라인(주석 라인) 처리
+          final patterns = _getPatterns(config);
+          line = TemplateConverter.convertContent(line, patterns);
+          result.add(line);
+          continue;
+        }
+
+        // Console 빌드 블록 종료 감지 (✅ Console 패키지들 빌드 완료)
+        if (inConsoleBuildBlock &&
+            line.contains('Console 패키지들 빌드 완료')) {
+          final patterns = _getPatterns(config);
+          line = TemplateConverter.convertContent(line, patterns);
+          result.add(line);
+          result.add('{{/enable_admin}}');
+          inConsoleBuildBlock = false;
+          continue;
+        }
+
+        // Console 빌드 블록 내부 라인 처리
+        if (inConsoleBuildBlock) {
+          final patterns = _getPatterns(config);
+          line = TemplateConverter.convertContent(line, patterns);
+          result.add(line);
+          continue;
+        }
+
+        // console_router 관련 echo 라인 감지 (단일 라인 조건부 처리)
+        if (!inConsoleBuildBlock &&
+            line.contains('echo') &&
+            line.contains('console_router')) {
           // echo 라인을 조건부로 감싸기
           final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add('{{#enable_admin}}');
           result.add(line);
           result.add('{{/enable_admin}}');
+          continue;
+        }
+
+        // Backend 빌드 라인 감지 (단일 라인 조건부 처리)
+        if (!inConsoleBuildBlock &&
+            line.contains('echo') &&
+            line.contains('Backend') &&
+            line.contains('dependBuild:backend')) {
+          // Backend 빌드 라인 끝에 조건부 태그 추가
+          final patterns = _getPatterns(config);
+          line = TemplateConverter.convertContent(line, patterns);
+          // 라인 끝의 & 뒤에 조건부 태그 추가
+          if (line.endsWith('&')) {
+            result.add('$line{{#has_serverpod}}');
+          } else {
+            result.add(line);
+          }
+          result.add('{{/has_serverpod}}');
           continue;
         }
 
@@ -2576,13 +2627,16 @@ class SyncMonorepoService {
     // 첫 번째 그룹: jaspr 관련 (jaspr ~ jaspr_serverpod)
     const firstServerpodGroupEnd = 'jaspr_serverpod:';
     // 두 번째 그룹: serverpod 코어 (serverpod ~ serverpod_serialization)
+    // 주의: serverpod_test는 dev_dependencies에서 처리되므로 여기서 제외
     final lastServerpodPackages = [
       'serverpod_serialization:',
-      'serverpod_test:',
     ];
 
-    // dev_dependencies의 serverpod 그룹 종료
-    const devServerpodGroupEnd = 'jaspr_web_compilers:';
+    // dev_dependencies의 개별 serverpod 패키지들
+    final devServerpodPackages = [
+      'dart_code_metrics_presets:',
+      'serverpod_test:',
+    ];
 
     // openapi 관련 패키지들 (첫 패키지와 마지막 패키지)
     const firstOpenapiPkg = 'dio:';
@@ -2598,8 +2652,6 @@ class SyncMonorepoService {
     const intlPkg = 'intl:';
     // mcp_toolkit 다음에 serverpod 두 번째 그룹 시작
     const mcpToolkitPkg = 'mcp_toolkit:';
-    // injectable_generator 다음에 serverpod 블록이 시작 (dev_dependencies)
-    const injectableGeneratorPkg = 'injectable_generator:';
     // pubspec_dependency_sorter 다음에 serverpod 세 번째 그룹 시작
     const pubspecDependencySorterPkg = 'pubspec_dependency_sorter:';
 
@@ -2607,10 +2659,8 @@ class SyncMonorepoService {
       var line = lines[i];
       final trimmed = line.trim();
 
-      // intl, injectable_generator, pubspec_dependency_sorter 라인에
-      // {{#has_serverpod}} 추가
+      // intl, pubspec_dependency_sorter 라인에 {{#has_serverpod}} 추가
       if (trimmed.startsWith(intlPkg) ||
-          trimmed.startsWith(injectableGeneratorPkg) ||
           trimmed.startsWith(pubspecDependencySorterPkg)) {
         line = '$line{{#has_serverpod}}';
         result.add(line);
@@ -2631,7 +2681,7 @@ class SyncMonorepoService {
         continue;
       }
 
-      // serverpod_serialization/serverpod_test (두 번째 그룹 종료) 뒤에 {{/has_serverpod}}
+      // serverpod_serialization/serverpod_test (dependencies 두 번째 그룹 종료) 뒤에 {{/has_serverpod}}
       var isLastServerpod = false;
       for (final pkg in lastServerpodPackages) {
         if (trimmed.startsWith(pkg)) {
@@ -2645,9 +2695,16 @@ class SyncMonorepoService {
         continue;
       }
 
-      // jaspr_web_compilers (dev_dependencies 그룹 종료) 뒤에 {{/has_serverpod}}
-      if (trimmed.startsWith(devServerpodGroupEnd)) {
-        line = '$line{{/has_serverpod}}';
+      // dev_dependencies의 개별 serverpod 패키지들에 {{#has_serverpod}}...{{/has_serverpod}} 추가
+      var isDevServerpod = false;
+      for (final pkg in devServerpodPackages) {
+        if (trimmed.startsWith(pkg)) {
+          line = '$line{{#has_serverpod}}{{/has_serverpod}}';
+          isDevServerpod = true;
+          break;
+        }
+      }
+      if (isDevServerpod) {
         result.add(line);
         continue;
       }
@@ -2662,11 +2719,8 @@ class SyncMonorepoService {
         if (hasOpenapiPkg) {
           // openapi 패키지가 있으면 블록 시작만
           line = '$line{{#has_openapi}}';
-        } else {
-          // openapi 패키지가 없으면 빈 블록 구조 생성
-          line =
-              '$line{{#has_openapi}}{{/has_openapi}}{{#has_graphql}}{{/has_graphql}}';
         }
+        // openapi 패키지가 없으면 아무 태그도 추가하지 않음 (빈 조건부 블록 제거)
         result.add(line);
         continue;
       }
