@@ -2632,11 +2632,12 @@ class SyncMonorepoService {
       'serverpod_serialization:',
     ];
 
-    // dev_dependencies의 개별 serverpod 패키지들
-    final devServerpodPackages = [
-      'dart_code_metrics_presets:',
-      'serverpod_test:',
-    ];
+    // dev_dependencies의 jaspr 관련 패키지들 (블록으로 감쌀 패키지들)
+    const firstJasprPkg = 'jaspr_builder:';
+    const lastJasprPkg = 'jaspr_web_compilers:';
+
+    // dev_dependencies의 serverpod_test (단일 라인 블록)
+    const serverpodTestPkg = 'serverpod_test:';
 
     // openapi 관련 패키지들 (첫 패키지와 마지막 패키지)
     const firstOpenapiPkg = 'dio:';
@@ -2652,16 +2653,13 @@ class SyncMonorepoService {
     const intlPkg = 'intl:';
     // mcp_toolkit 다음에 serverpod 두 번째 그룹 시작
     const mcpToolkitPkg = 'mcp_toolkit:';
-    // pubspec_dependency_sorter 다음에 serverpod 세 번째 그룹 시작
-    const pubspecDependencySorterPkg = 'pubspec_dependency_sorter:';
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
       final trimmed = line.trim();
 
-      // intl, pubspec_dependency_sorter 라인에 {{#has_serverpod}} 추가
-      if (trimmed.startsWith(intlPkg) ||
-          trimmed.startsWith(pubspecDependencySorterPkg)) {
+      // intl 라인에 {{#has_serverpod}} 추가
+      if (trimmed.startsWith(intlPkg)) {
         line = '$line{{#has_serverpod}}';
         result.add(line);
         continue;
@@ -2681,7 +2679,7 @@ class SyncMonorepoService {
         continue;
       }
 
-      // serverpod_serialization/serverpod_test (dependencies 두 번째 그룹 종료) 뒤에 {{/has_serverpod}}
+      // serverpod_serialization (dependencies 두 번째 그룹 종료) 뒤에 {{/has_serverpod}}
       var isLastServerpod = false;
       for (final pkg in lastServerpodPackages) {
         if (trimmed.startsWith(pkg)) {
@@ -2695,17 +2693,22 @@ class SyncMonorepoService {
         continue;
       }
 
-      // dev_dependencies의 개별 serverpod 패키지들에 {{#has_serverpod}}...{{/has_serverpod}} 추가
-      var isDevServerpod = false;
-      for (final pkg in devServerpodPackages) {
-        if (trimmed.startsWith(pkg)) {
-          line = '$line{{#has_serverpod}}{{/has_serverpod}}';
-          isDevServerpod = true;
-          break;
-        }
+      // dev_dependencies의 jaspr_builder 시작: 이전 라인에 {{#has_serverpod}} 추가
+      if (trimmed.startsWith(firstJasprPkg)) {
+        result.add('{{#has_serverpod}}$line');
+        continue;
       }
-      if (isDevServerpod) {
+
+      // dev_dependencies의 jaspr_web_compilers 종료: 라인 끝에 {{/has_serverpod}} 추가
+      if (trimmed.startsWith(lastJasprPkg)) {
+        line = '$line{{/has_serverpod}}';
         result.add(line);
+        continue;
+      }
+
+      // dev_dependencies의 serverpod_test: 단일 라인 블록
+      if (trimmed.startsWith(serverpodTestPkg)) {
+        result.add('{{#has_serverpod}}$line{{/has_serverpod}}');
         continue;
       }
 
