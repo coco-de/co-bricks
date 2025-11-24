@@ -118,9 +118,28 @@ The diff detection engine compares features across multiple projects to identify
 - Implementation quality metrics
 - Code patterns and best practices
 
-**Compare a single feature**:
+**Single Project Analysis Mode** (template vs bricks):
 ```bash
-# Basic structural comparison
+# Compare template project with existing bricks
+dart run bin/co_bricks.dart diff \
+  --project-a template/good-teacher \
+  --feature auth
+
+# With full quality analysis
+dart run bin/co_bricks.dart diff \
+  --project-a template/good-teacher \
+  --feature auth \
+  --full-analysis
+
+# Analyze all features against bricks
+dart run bin/co_bricks.dart diff \
+  --project-a template/good-teacher \
+  --all-features
+```
+
+**Comparison Mode** (two projects):
+```bash
+# Compare two different projects
 dart run bin/co_bricks.dart diff \
   --project-a template/good-teacher \
   --project-b template/blueprint \
@@ -180,10 +199,18 @@ dart run bin/co_bricks.dart diff \
 - Summary report (--all-features): `claudedocs/features-summary.md`
 
 **Use Cases**:
-- Pre-sync analysis before syncing features to bricks
-- Quality comparison between openapi and serverpod implementations
-- Migration planning (identify missing features to port)
-- Best practice identification (which implementation has better patterns)
+
+*Single Project Analysis Mode:*
+- **Pre-sync validation**: Check template changes before syncing to bricks
+- **New feature detection**: Identify features not yet in bricks (generates baseline report)
+- **Drift detection**: Find differences between template and bricks over time
+- **Quality improvement**: Compare current implementation with brick patterns
+
+*Comparison Mode:*
+- **Cross-project learning**: Compare openapi vs serverpod implementations
+- **Migration planning**: Identify missing features to port between projects
+- **Best practice identification**: Determine which implementation has better patterns
+- **Merge preparation**: Analyze conflicts before integrating features
 
 ### Testing
 
