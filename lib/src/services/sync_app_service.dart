@@ -131,11 +131,11 @@ class SyncAppService {
     logger.info('   📋 Copying from ${path.basename(sourcePath.path)}...');
     await FileUtils.copyDirectory(sourcePath, targetBrickDir, overwrite: true);
 
-    // .envrc 파일 제거 (프로젝트별 고유 환경 변수이므로 동기화하지 않음)
-    final envrcFile = File(path.join(targetBrickDir.path, '.envrc'));
-    if (envrcFile.existsSync()) {
-      await envrcFile.delete();
-      logger.info('   🗑️  Removed .envrc (project-specific environment)');
+    // .envrc 파일 템플릿 변수로 변환
+    final sourceEnvrc = File(path.join(sourcePath.path, '.envrc'));
+    final targetEnvrc = File(path.join(targetBrickDir.path, '.envrc'));
+    if (sourceEnvrc.existsSync()) {
+      await _convertEnvrcToTemplate(sourceEnvrc, targetEnvrc);
     }
 
     // .gitignore 파일들 스마트 병합
@@ -609,6 +609,84 @@ class SyncAppService {
           hookManagedPatterns: HookManagedPatterns.allAppPatterns,
         );
       }
+    }
+  }
+
+  /// .envrc 파일을 템플릿 변수로 변환
+  /// - 키는 유지하고 값만 템플릿 변수로 변환
+  /// - 프로젝트별 고유 값들을 Mason 변수로 치환
+  Future<void> _convertEnvrcToTemplate(
+    File sourceEnvrc,
+    File targetEnvrc,
+  ) async {
+    logger.info('   🔄 Converting .envrc to template...');
+
+    final content = await sourceEnvrc.readAsString();
+    final lines = content.split('\n');
+    final convertedLines = <String>[];
+
+    for (final line in lines) {
+      // 빈 줄이나 주석은 그대로 유지
+      if (line.trim().isEmpty || line.trim().startsWith('#')) {
+        convertedLines.add(line);
+        continue;
+      }
+
+      // export 문 파싱
+      if (line.startsWith('export ')) {
+        final match = RegExp(r"export\s+(\w+)='([^']*)'").firstMatch(line);
+        if (match != null) {
+          final key = match.group(1)!;
+          final value = match.group(2)!;
+
+          // 값을 템플릿 변수로 변환
+          final templateValue = _convertValueToTemplate(key, value);
+          convertedLines.add("export $key='$templateValue'");
+        } else {
+          // 파싱 실패 시 원본 유지
+          convertedLines.add(line);
+        }
+      } else {
+        convertedLines.add(line);
+      }
+    }
+
+    await targetEnvrc.writeAsString('${convertedLines.join('\n')}\n');
+    logger.info('   ✅ .envrc converted to template');
+  }
+
+  /// 환경 변수 값을 템플릿 변수로 변환
+  String _convertValueToTemplate(String key, String value) {
+    // 프로젝트별로 다른 값들을 템플릿 변수로 치환
+    switch (key) {
+      case 'GITHUB_ORG':
+        return '{{github_org}}';
+      case 'GITHUB_REPO':
+        return '{{github_repo}}';
+      case 'GITHUB_VISIBILITY':
+        return '{{github_visibility}}';
+      case 'RELEASE_STORE_PASSWORD':
+      case 'MATCH_PASSWORD':
+      case 'MATCH_KEYCHAIN_PASSWORD':
+        // 비밀번호는 플레이스홀더로
+        return 'CHANGE_ME_{{project_name.snakeCase().upperCase()}}_PASSWORD';
+      case 'MATCH_KEYCHAIN_NAME':
+        return '{{project_name.snakeCase()}}';
+      case 'APPSTORE_CONNECT_API_KEY_BASE64':
+      case 'MATCH_GIT_BASIC_AUTHORIZATION_BASE64':
+      case 'FASTLANE_ANDROID_BASE64':
+      case 'FASTLANE_IOS_BASE64':
+      case 'FIREBASE_DEV_APP_DISTRIBUTION_CREDENTIALS_BASE64':
+      case 'FIREBASE_STG_APP_DISTRIBUTION_CREDENTIALS_BASE64':
+        // Base64 인코딩된 값들은 플레이스홀더로
+        return 'CHANGE_ME_BASE64_ENCODED_VALUE';
+      default:
+        // Firebase App ID 등 프로젝트별 고유 값들
+        if (key.startsWith('FIREBASE_') && key.endsWith('_ID')) {
+          return 'CHANGE_ME_FIREBASE_APP_ID';
+        }
+        // 기타 값은 원본 유지 (주석이나 기본값)
+        return value;
     }
   }
 }
