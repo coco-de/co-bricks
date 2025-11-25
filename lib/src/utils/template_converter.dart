@@ -1935,6 +1935,124 @@ class TemplateConverter {
         ),
       );
 
+      // HTML title 태그 패턴
+      // <title>Blueprint</title> → <title>{{project_name.titleCase()}}</title>
+      patterns.add(
+        ReplacementPattern(
+          RegExp('<title>${_escapeRegex(basePascal)}</title>'),
+          '<title>{{project_name.titleCase()}}</title>',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('<title>${_escapeRegex(baseTitle)}</title>'),
+          '<title>{{project_name.titleCase()}}</title>',
+        ),
+      );
+
+      // HTML meta description 패턴
+      // content="Blueprint Service" → content="{{project_name.titleCase()}} Service"
+      patterns.add(
+        ReplacementPattern(
+          RegExp('content="${_escapeRegex(basePascal)} Service"'),
+          'content="{{project_name.titleCase()}} Service"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('content="${_escapeRegex(baseTitle)} Service"'),
+          'content="{{project_name.titleCase()}} Service"',
+        ),
+      );
+
+      // HTML apple-mobile-web-app-title 패턴
+      // content="Blueprint" (apple-mobile-web-app-title에서 사용)
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            '(apple-mobile-web-app-title"\\s*content=")${_escapeRegex(basePascal)}"',
+          ),
+          r'$1{{project_name.titleCase()}}"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            '(apple-mobile-web-app-title"\\s*content=")${_escapeRegex(baseTitle)}"',
+          ),
+          r'$1{{project_name.titleCase()}}"',
+        ),
+      );
+
+      // build.yaml name 패턴 (Widgetbook)
+      // name: "Blueprint Widgetbook" → name: "{{project_name.titleCase()}} Widgetbook"
+      patterns.add(
+        ReplacementPattern(
+          RegExp('name:\\s*"${_escapeRegex(basePascal)} Widgetbook"'),
+          'name: "{{project_name.titleCase()}} Widgetbook"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('name:\\s*"${_escapeRegex(baseTitle)} Widgetbook"'),
+          'name: "{{project_name.titleCase()}} Widgetbook"',
+        ),
+      );
+
+      // Terraform S3 버킷 이름 패턴
+      // blueprint-public-storage-prod-4546499
+      // → {{project_name.paramCase()}}-public-storage-prod-{{randomawsid}}
+      for (final access in ['public', 'private']) {
+        for (final env in ['prod', 'staging', 'dev']) {
+          patterns.add(
+            ReplacementPattern(
+              RegExp(
+                '${_escapeRegex(baseParam)}-$access-storage-$env-(\\d{6,8})',
+              ),
+              '{{project_name.paramCase()}}-$access-storage-$env-{{randomawsid}}',
+            ),
+          );
+        }
+      }
+
+      // Terraform Route53 레코드 이름 패턴
+      // "stgblueprint" → "stg{{project_name.paramCase()}}"
+      // "devblueprint" → "dev{{project_name.paramCase()}}"
+      for (final prefix in ['stg', 'dev']) {
+        patterns.add(
+          ReplacementPattern(
+            RegExp('"$prefix${_escapeRegex(baseParam)}"'),
+            '"$prefix{{project_name.paramCase()}}"',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp('"$prefix${_escapeRegex(baseSnake)}"'),
+            '"$prefix{{project_name.paramCase()}}"',
+          ),
+        );
+      }
+
+      // Terraform Route53 CNAME 레코드 값 패턴
+      // "staging.blueprint." → "staging.{{project_name.paramCase()}}."
+      // "development.blueprint." → "development.{{project_name.paramCase()}}."
+      // "blueprint." → "{{project_name.paramCase()}}."
+      for (final envPrefix in ['staging', 'development', '']) {
+        final dotPrefix = envPrefix.isEmpty ? '' : '$envPrefix.';
+        patterns.add(
+          ReplacementPattern(
+            RegExp('"$dotPrefix${_escapeRegex(baseParam)}\\."'),
+            '"$dotPrefix{{project_name.paramCase()}}."',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp('"$dotPrefix${_escapeRegex(baseSnake)}\\."'),
+            '"$dotPrefix{{project_name.paramCase()}}."',
+          ),
+        );
+      }
+
       // 1. Pascal case (HelloWorld) - suffix가 있는 패턴 먼저 (더 구체적인 순서)
       // Mock 클래스 패턴 (_FakeGoodTeacherService_0)
       for (final suffix in [
@@ -2653,6 +2771,153 @@ class TemplateConverter {
               ]);
             }
           }
+        }
+      }
+    }
+
+    // Firebase 서비스 계정 URL 패턴
+    // blueprint-{randomId}-dev.iam.gserviceaccount.com
+    // → {{project_name.paramCase()}}-{{randomprojectid}}-dev.iam.gserviceaccount.com
+    for (final projectName in projectNames) {
+      final projectParam = projectName.replaceAll('_', '-');
+
+      for (final randomId in randomProjectIds) {
+        for (final env in ['dev', 'stg', 'prod']) {
+          // client_x509_cert_url 내부의 Firebase 서비스 계정 URL
+          // URL 인코딩된 형태: blueprint-k9rm-dev.iam.gserviceaccount.com
+          patterns.add(
+            ReplacementPattern(
+              RegExp(
+                '${_escapeRegex(projectParam)}-${_escapeRegex(randomId)}-$env\\.iam\\.gserviceaccount\\.com',
+              ),
+              '{{project_name.paramCase()}}-{{randomprojectid}}-$env.iam.gserviceaccount.com',
+            ),
+          );
+        }
+
+        // google-services.json project_id 패턴
+        // "project_id": "blueprint-k9rm-dev"
+        for (final env in ['dev', 'stg', 'prod']) {
+          patterns.add(
+            ReplacementPattern(
+              RegExp(
+                '"project_id":\\s*"${_escapeRegex(projectParam)}-${_escapeRegex(randomId)}-$env"',
+              ),
+              '"project_id": "{{project_name.paramCase()}}-{{randomprojectid}}-$env"',
+            ),
+          );
+        }
+        // 환경 접미사 없는 버전 (production)
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              '"project_id":\\s*"${_escapeRegex(projectParam)}-${_escapeRegex(randomId)}"',
+            ),
+            '"project_id": "{{project_name.paramCase()}}-{{randomprojectid}}"',
+          ),
+        );
+
+        // google-services.json storage_bucket 패턴
+        // "storage_bucket": "blueprint-k9rm-dev.firebasestorage.app"
+        for (final env in ['dev', 'stg', 'prod']) {
+          patterns.add(
+            ReplacementPattern(
+              RegExp(
+                '"storage_bucket":\\s*"${_escapeRegex(projectParam)}-${_escapeRegex(randomId)}-$env\\.firebasestorage\\.app"',
+              ),
+              '"storage_bucket": "{{project_name.paramCase()}}-{{randomprojectid}}-$env.firebasestorage.app"',
+            ),
+          );
+        }
+        // 환경 접미사 없는 버전
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              '"storage_bucket":\\s*"${_escapeRegex(projectParam)}-${_escapeRegex(randomId)}\\.firebasestorage\\.app"',
+            ),
+            '"storage_bucket": "{{project_name.paramCase()}}-{{randomprojectid}}.firebasestorage.app"',
+          ),
+        );
+
+        // Route53/Terraform Firebase web.app 도메인 패턴
+        // blueprint-k9rm.web.app → {{project_name.paramCase()}}-{{randomprojectid}}.web.app
+        for (final env in ['', '-dev', '-stg']) {
+          patterns.add(
+            ReplacementPattern(
+              RegExp(
+                '${_escapeRegex(projectParam)}-${_escapeRegex(randomId)}$env\\.web\\.app',
+              ),
+              '{{project_name.paramCase()}}-{{randomprojectid}}$env.web.app',
+            ),
+          );
+        }
+
+        // URL 인코딩된 이메일 주소 패턴 (client_x509_cert_url 내부)
+        // %40blueprint-k9rm-dev → %40{{project_name.paramCase()}}-{{randomprojectid}}-dev
+        for (final env in ['dev', 'stg', 'prod']) {
+          patterns.add(
+            ReplacementPattern(
+              RegExp(
+                '%40${_escapeRegex(projectParam)}-${_escapeRegex(randomId)}-$env',
+              ),
+              '%40{{project_name.paramCase()}}-{{randomprojectid}}-$env',
+            ),
+          );
+        }
+
+        // URL 인코딩된 이메일 주소 패턴 - production 환경 (환경 접미사 없음)
+        // %40blueprint-k9rm.iam → %40{{project_name.paramCase()}}-{{randomprojectid}}.iam
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              '%40${_escapeRegex(projectParam)}-${_escapeRegex(randomId)}\\.iam',
+            ),
+            '%40{{project_name.paramCase()}}-{{randomprojectid}}.iam',
+          ),
+        );
+
+        // URL 인코딩된 이메일 주소 패턴 - 이미 변환된 경우 처리
+        // %40blueprint-{{randomprojectid}}-dev → %40{{project_name.paramCase()}}-{{randomprojectid}}-dev
+        for (final env in ['dev', 'stg', 'prod']) {
+          patterns.add(
+            ReplacementPattern(
+              RegExp(
+                '%40${_escapeRegex(projectParam)}-\\{\\{randomprojectid\\}\\}-$env',
+              ),
+              '%40{{project_name.paramCase()}}-{{randomprojectid}}-$env',
+            ),
+          );
+        }
+
+        // URL 인코딩된 이메일 - production (이미 변환된 경우)
+        // %40blueprint-{{randomprojectid}}.iam → %40{{project_name.paramCase()}}-{{randomprojectid}}.iam
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              '%40${_escapeRegex(projectParam)}-\\{\\{randomprojectid\\}\\}\\.iam',
+            ),
+            '%40{{project_name.paramCase()}}-{{randomprojectid}}.iam',
+          ),
+        );
+      }
+    }
+
+    // Terraform firebase_project_ids 맵 값 패턴
+    // "production"  = "blueprint-k9rm"
+    for (final projectName in projectNames) {
+      final projectParam = projectName.replaceAll('_', '-');
+
+      for (final randomId in randomProjectIds) {
+        for (final env in ['dev', 'stg', 'prod', '']) {
+          final suffix = env.isEmpty ? '' : '-$env';
+          patterns.add(
+            ReplacementPattern(
+              RegExp(
+                '=\\s*"${_escapeRegex(projectParam)}-${_escapeRegex(randomId)}$suffix"',
+              ),
+              '= "{{project_name.paramCase()}}-{{randomprojectid}}$suffix"',
+            ),
+          );
         }
       }
     }
