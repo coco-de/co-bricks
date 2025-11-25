@@ -1182,6 +1182,72 @@ class TemplateConverter {
         ),
       );
 
+      // macOS PRODUCT_BUNDLE_IDENTIFIER 패턴 (AppInfo.xcconfig)
+      // PRODUCT_BUNDLE_IDENTIFIER = im.cocode.blueprint.widgetbook.blueprintWidgetbook
+      // → PRODUCT_BUNDLE_IDENTIFIER = {{org_tld}}.{{org_name.lowerCase()}}.{{project_name.snakeCase()}}.suffix.{{project_name.camelCase()}}Suffix
+      for (final suffix in ['widgetbook', 'console']) {
+        final suffixPascal = suffix[0].toUpperCase() + suffix.substring(1);
+        for (final orgTld in orgTlds) {
+          for (final orgName in orgNames) {
+            final orgLower = orgName.toLowerCase();
+            // blueprintWidgetbook 형태 (camelCase + suffix)
+            final baseCamel = words.isEmpty
+                ? baseSnake.toLowerCase()
+                : words[0].toLowerCase() +
+                    words
+                        .sublist(1)
+                        .map(
+                          (word) => word.isEmpty
+                              ? ''
+                              : word[0].toUpperCase() +
+                                  word.substring(1).toLowerCase(),
+                        )
+                        .join();
+
+            patterns.add(
+              ReplacementPattern(
+                RegExp(
+                  'PRODUCT_BUNDLE_IDENTIFIER\\s*=\\s*'
+                  '${_escapeRegex(orgTld)}\\.'
+                  '${_escapeRegex(orgLower)}\\.'
+                  '${_escapeRegex(baseSnake)}\\.'
+                  '$suffix\\.'
+                  '${_escapeRegex(baseCamel)}$suffixPascal\\b',
+                ),
+                'PRODUCT_BUNDLE_IDENTIFIER = '
+                '{{org_tld}}.{{org_name.lowerCase()}}.{{project_name.snakeCase()}}.$suffix.'
+                '{{project_name.camelCase()}}$suffixPascal',
+              ),
+            );
+          }
+        }
+      }
+
+      // macOS PRODUCT_COPYRIGHT 패턴 (AppInfo.xcconfig)
+      // PRODUCT_COPYRIGHT = Copyright © 2025 im.cocode.blueprint.widgetbook. All rights reserved.
+      // → PRODUCT_COPYRIGHT = Copyright © 2025 {{org_tld}}.{{org_name.lowerCase()}}.{{project_name.snakeCase()}}.suffix. All rights reserved.
+      for (final suffix in ['widgetbook', 'console']) {
+        for (final orgTld in orgTlds) {
+          for (final orgName in orgNames) {
+            final orgLower = orgName.toLowerCase();
+            patterns.add(
+              ReplacementPattern(
+                RegExp(
+                  'PRODUCT_COPYRIGHT\\s*=\\s*Copyright © \\d{4} '
+                  '${_escapeRegex(orgTld)}\\.'
+                  '${_escapeRegex(orgLower)}\\.'
+                  '${_escapeRegex(baseSnake)}\\.'
+                  '$suffix\\. All rights reserved\\.',
+                ),
+                'PRODUCT_COPYRIGHT = Copyright © {{current_year}} '
+                '{{org_tld}}.{{org_name.lowerCase()}}.{{project_name.snakeCase()}}.$suffix. '
+                'All rights reserved.',
+              ),
+            );
+          }
+        }
+      }
+
       // HTML title/description 패턴 (web/index.html)
       // <title>Blueprint</title> → <title>{{project_name.titleCase()}}</title>
       // content="Blueprint Service"
@@ -1224,6 +1290,158 @@ class TemplateConverter {
           'content="{{project_name.titleCase()}}"',
         ),
       );
+
+      // Android manifestPlaceholders 앱 이름 패턴
+      // manifestPlaceholders["appName"] = "Blueprint"
+      // → manifestPlaceholders["appName"] = "{{project_name.titleCase()}}"
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'manifestPlaceholders\\["appName"\\]\\s*=\\s*"${_escapeRegex(basePascal)}"',
+          ),
+          'manifestPlaceholders["appName"] = "{{project_name.titleCase()}}"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'manifestPlaceholders\\["appName"\\]\\s*=\\s*"${_escapeRegex(baseTitle)}"',
+          ),
+          'manifestPlaceholders["appName"] = "{{project_name.titleCase()}}"',
+        ),
+      );
+
+      // Android Fastlane $app_name 패턴
+      // $app_name = "Blueprint" → $app_name = "{{project_name.titleCase()}}"
+      patterns.add(
+        ReplacementPattern(
+          RegExp(r'\$app_name\s*=\s*"' + _escapeRegex(basePascal) + '"'),
+          r'$app_name = "{{project_name.titleCase()}}"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(r'\$app_name\s*=\s*"' + _escapeRegex(baseTitle) + '"'),
+          r'$app_name = "{{project_name.titleCase()}}"',
+        ),
+      );
+
+      // Widgetbook build.yaml name 패턴
+      // name: "Blueprint Widgetbook" → name: "{{project_name.titleCase()}} Widgetbook"
+      patterns.add(
+        ReplacementPattern(
+          RegExp('name:\\s*"${_escapeRegex(basePascal)} Widgetbook"'),
+          'name: "{{project_name.titleCase()}} Widgetbook"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('name:\\s*"${_escapeRegex(baseTitle)} Widgetbook"'),
+          'name: "{{project_name.titleCase()}} Widgetbook"',
+        ),
+      );
+
+      // Android strings.xml appName 패턴
+      // <string name="appName">Blueprint</string>
+      // → <string name="appName">{{project_name.titleCase()}}</string>
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            '<string name="appName">${_escapeRegex(basePascal)}</string>',
+          ),
+          '<string name="appName">{{project_name.titleCase()}}</string>',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            '<string name="appName">${_escapeRegex(baseTitle)}</string>',
+          ),
+          '<string name="appName">{{project_name.titleCase()}}</string>',
+        ),
+      );
+      // app_name 패턴
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            '<string name="app_name">${_escapeRegex(basePascal)}</string>',
+          ),
+          '<string name="app_name">{{project_name.titleCase()}}</string>',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            '<string name="app_name">${_escapeRegex(baseTitle)}</string>',
+          ),
+          '<string name="app_name">{{project_name.titleCase()}}</string>',
+        ),
+      );
+
+      // Android Keystore alias 패턴
+      // -alias blueprint → -alias {{project_name.snakeCase()}}
+      patterns.add(
+        ReplacementPattern(
+          RegExp('-alias ${_escapeRegex(baseSnake)}\\b'),
+          '-alias {{project_name.snakeCase()}}',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('-alias ${_escapeRegex(baseParam)}\\b'),
+          '-alias {{project_name.snakeCase()}}',
+        ),
+      );
+      // keyAlias=blueprint → keyAlias={{project_name.snakeCase()}}
+      patterns.add(
+        ReplacementPattern(
+          RegExp('keyAlias=${_escapeRegex(baseSnake)}\\b'),
+          'keyAlias={{project_name.snakeCase()}}',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('keyAlias=${_escapeRegex(baseParam)}\\b'),
+          'keyAlias={{project_name.snakeCase()}}',
+        ),
+      );
+
+      // Golden test configuration comment 패턴
+      // /// Golden test configuration for Blueprint Widgetbook
+      // → /// Golden test configuration for {{project_name.titleCase()}} Widgetbook
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'Golden test configuration for ${_escapeRegex(basePascal)} Widgetbook',
+          ),
+          'Golden test configuration for {{project_name.titleCase()}} Widgetbook',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'Golden test configuration for ${_escapeRegex(baseTitle)} Widgetbook',
+          ),
+          'Golden test configuration for {{project_name.titleCase()}} Widgetbook',
+        ),
+      );
+
+      // Firebase buildConfigurations 경로 패턴
+      // "blueprint/android/app/src/development" → "{{project_name.snakeCase()}}/android/app/src/development"
+      for (final env in ['development', 'staging', 'production']) {
+        patterns.add(
+          ReplacementPattern(
+            RegExp('"${_escapeRegex(baseSnake)}/android/app/src/$env"'),
+            '"{{project_name.snakeCase()}}/android/app/src/$env"',
+          ),
+        );
+        patterns.add(
+          ReplacementPattern(
+            RegExp('"${_escapeRegex(baseParam)}/android/app/src/$env"'),
+            '"{{project_name.snakeCase()}}/android/app/src/$env"',
+          ),
+        );
+      }
 
       // Kotlin package 문 패턴 (MainActivity.kt)
       // package im.cocode.blueprint.widgetbook.k9rm
@@ -1927,10 +2145,11 @@ class TemplateConverter {
                 ),
               ]);
 
-              // iOS Bundle ID with suffix 패턴
-              // im.cocode.blueprint.widgetbook.k9rm
+              // iOS/Android Bundle ID with suffix 패턴
+              // im.cocode.blueprint.console.k9rm
               // → {{org_tld}}.{{org_name}}.{{project_name.snakeCase()}}.suffix.{{randomprojectid}}
               patterns.addAll([
+                // .dev suffix
                 ReplacementPattern(
                   RegExp(
                     '\\b${_escapeRegex(orgTld)}\\.'
@@ -1942,6 +2161,7 @@ class TemplateConverter {
                   '{{org_tld}}.{{org_name}}.'
                   '{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}.dev',
                 ),
+                // .stg suffix
                 ReplacementPattern(
                   RegExp(
                     '\\b${_escapeRegex(orgTld)}\\.'
@@ -1953,6 +2173,7 @@ class TemplateConverter {
                   '{{org_tld}}.{{org_name}}.'
                   '{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}.stg',
                 ),
+                // 기본 (suffix 없음)
                 ReplacementPattern(
                   RegExp(
                     '\\b${_escapeRegex(orgTld)}\\.'
@@ -1965,6 +2186,191 @@ class TemplateConverter {
                   '{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}',
                 ),
               ]);
+
+              // Kotlin package 문 패턴 (MainActivity.kt)
+              // package im.cocode.blueprint.console.k9rm (끝에 _가 없는 형태)
+              // → package {{org_tld}}.{{org_name}}.{{project_name.snakeCase()}}.suffix.{{randomprojectid}}
+              patterns.add(
+                ReplacementPattern(
+                  RegExp(
+                    'package ${_escapeRegex(orgTld)}\\.'
+                    '${_escapeRegex(orgLower)}\\.'
+                    '${_escapeRegex(projectName)}\\.'
+                    '$suffix\\.'
+                    '${_escapeRegex(randomId)}\\b',
+                  ),
+                  'package {{org_tld}}.{{org_name.lowerCase()}}.'
+                  '{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}',
+                ),
+              );
+
+              // Android namespace/applicationId 패턴 (build.gradle.kts)
+              // namespace = "im.cocode.blueprint.console.k9rm"
+              // applicationId = "im.cocode.blueprint.console.k9rm"
+              patterns.add(
+                ReplacementPattern(
+                  RegExp(
+                    '(namespace|applicationId)\\s*=\\s*"'
+                    '${_escapeRegex(orgTld)}\\.'
+                    '${_escapeRegex(orgLower)}\\.'
+                    '${_escapeRegex(projectName)}\\.'
+                    '$suffix\\.'
+                    '${_escapeRegex(randomId)}"',
+                  ),
+                  r'$1 = "{{org_tld}}.{{org_name.lowerCase()}}.'
+                  '{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}"',
+                ),
+              );
+
+              // Android package_name 패턴 (google-services.json)
+              // "package_name": "im.cocode.blueprint.console.k9rm.dev"
+              patterns.addAll([
+                ReplacementPattern(
+                  RegExp(
+                    '"package_name":\\s*"'
+                    '${_escapeRegex(orgTld)}\\.'
+                    '${_escapeRegex(orgLower)}\\.'
+                    '${_escapeRegex(projectName)}\\.'
+                    '$suffix\\.'
+                    '${_escapeRegex(randomId)}\\.dev"',
+                  ),
+                  '"package_name": "{{org_tld}}.{{org_name.lowerCase()}}.'
+                  '{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}.dev"',
+                ),
+                ReplacementPattern(
+                  RegExp(
+                    '"package_name":\\s*"'
+                    '${_escapeRegex(orgTld)}\\.'
+                    '${_escapeRegex(orgLower)}\\.'
+                    '${_escapeRegex(projectName)}\\.'
+                    '$suffix\\.'
+                    '${_escapeRegex(randomId)}\\.stg"',
+                  ),
+                  '"package_name": "{{org_tld}}.{{org_name.lowerCase()}}.'
+                  '{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}.stg"',
+                ),
+                ReplacementPattern(
+                  RegExp(
+                    '"package_name":\\s*"'
+                    '${_escapeRegex(orgTld)}\\.'
+                    '${_escapeRegex(orgLower)}\\.'
+                    '${_escapeRegex(projectName)}\\.'
+                    '$suffix\\.'
+                    '${_escapeRegex(randomId)}"',
+                  ),
+                  '"package_name": "{{org_tld}}.{{org_name.lowerCase()}}.'
+                  '{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}"',
+                ),
+              ]);
+
+              // Android Fastlane package_name 패턴 (Appfile)
+              // package_name("im.cocode.blueprint.console.k9rm")
+              patterns.add(
+                ReplacementPattern(
+                  RegExp(
+                    'package_name\\("'
+                    '${_escapeRegex(orgTld)}\\.'
+                    '${_escapeRegex(orgLower)}\\.'
+                    '${_escapeRegex(projectName)}\\.'
+                    '$suffix\\.'
+                    '${_escapeRegex(randomId)}"\\)',
+                  ),
+                  'package_name("{{org_tld}}.{{org_name.lowerCase()}}.'
+                  '{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}")',
+                ),
+              );
+
+              // Android manifest package 속성 (AndroidManifest.xml)
+              // <manifest ... package="im.cocode.blueprint.widgetbook.k9rm">
+              patterns.add(
+                ReplacementPattern(
+                  RegExp(
+                    'package="'
+                    '${_escapeRegex(orgTld)}\\.'
+                    '${_escapeRegex(orgLower)}\\.'
+                    '${_escapeRegex(projectName)}\\.'
+                    '$suffix\\.'
+                    '${_escapeRegex(randomId)}"',
+                  ),
+                  'package="{{org_tld}}.{{org_name.lowerCase()}}.'
+                  '{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}"',
+                ),
+              );
+
+              // Firebase iosBundleId 패턴 (development/staging/production firebase options)
+              // iosBundleId: 'im.cocode.blueprint.console.k9rm.dev'
+              patterns.addAll([
+                ReplacementPattern(
+                  RegExp(
+                    "iosBundleId:\\s*'"
+                    '${_escapeRegex(orgTld)}\\.'
+                    '${_escapeRegex(orgLower)}\\.'
+                    '${_escapeRegex(projectName)}\\.'
+                    '$suffix\\.'
+                    "${_escapeRegex(randomId)}\\.dev'",
+                  ),
+                  "iosBundleId: '{{org_tld}}.{{org_name.lowerCase()}}."
+                  "{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}.dev'",
+                ),
+                ReplacementPattern(
+                  RegExp(
+                    "iosBundleId:\\s*'"
+                    '${_escapeRegex(orgTld)}\\.'
+                    '${_escapeRegex(orgLower)}\\.'
+                    '${_escapeRegex(projectName)}\\.'
+                    '$suffix\\.'
+                    "${_escapeRegex(randomId)}\\.stg'",
+                  ),
+                  "iosBundleId: '{{org_tld}}.{{org_name.lowerCase()}}."
+                  "{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}.stg'",
+                ),
+                ReplacementPattern(
+                  RegExp(
+                    "iosBundleId:\\s*'"
+                    '${_escapeRegex(orgTld)}\\.'
+                    '${_escapeRegex(orgLower)}\\.'
+                    '${_escapeRegex(projectName)}\\.'
+                    '$suffix\\.'
+                    "${_escapeRegex(randomId)}'",
+                  ),
+                  "iosBundleId: '{{org_tld}}.{{org_name.lowerCase()}}."
+                  "{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}'",
+                ),
+              ]);
+
+              // macOS iosBundleId 패턴 (Firebase options - mac prefix)
+              // iosBundleId: 'im.cocode.mac.blueprint.console.o7h1'
+              patterns.addAll([
+                ReplacementPattern(
+                  RegExp(
+                    "iosBundleId:\\s*'"
+                    '${_escapeRegex(orgTld)}\\.'
+                    '${_escapeRegex(orgLower)}\\.mac\\.'
+                    '${_escapeRegex(projectName)}\\.'
+                    '$suffix\\.'
+                    "${_escapeRegex(randomId)}'",
+                  ),
+                  "iosBundleId: '{{org_tld}}.{{org_name.lowerCase()}}.mac."
+                  "{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}'",
+                ),
+              ]);
+
+              // iOS bundle_id 패턴 (google-services.json 내부)
+              // "bundle_id": "im.cocode.blueprint.widgetbook.k9rm"
+              patterns.add(
+                ReplacementPattern(
+                  RegExp(
+                    '"bundle_id":\\s*"'
+                    '${_escapeRegex(orgTld)}\\.'
+                    '${_escapeRegex(orgLower)}\\.'
+                    '${_escapeRegex(projectName)}\\.'
+                    '$suffix\\.'
+                    '${_escapeRegex(randomId)}"',
+                  ),
+                  '"bundle_id": "{{org_tld}}.{{org_name.lowerCase()}}.'
+                  '{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}"',
+                ),
+              );
             }
 
             // projectName-randomId 패턴 (기본)
@@ -2370,7 +2776,31 @@ class TemplateConverter {
     final patterns = <ReplacementPattern>[];
 
     for (final projectName in projectNames) {
+      final projectParam = projectName.replaceAll('_', '-');
+
       for (final orgTld in orgTlds) {
+        // iOS entitlements 도메인 패턴 (webcredentials, applinks)
+        // dev.blueprint.im → dev.{{project_name.paramCase()}}.{{org_tld}}
+        // stg.blueprint.im → stg.{{project_name.paramCase()}}.{{org_tld}}
+        for (final prefix in ['dev', 'stg', 'staging', 'prod', 'production']) {
+          patterns.add(
+            ReplacementPattern(
+              RegExp(
+                '$prefix\\.${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}\\b',
+              ),
+              '$prefix.{{project_name.paramCase()}}.{{org_tld}}',
+            ),
+          );
+          patterns.add(
+            ReplacementPattern(
+              RegExp(
+                '$prefix\\.${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}\\b',
+              ),
+              '$prefix.{{project_name.paramCase()}}.{{org_tld}}',
+            ),
+          );
+        }
+
         patterns.addAll([
           ReplacementPattern(
             RegExp(
@@ -2380,9 +2810,28 @@ class TemplateConverter {
           ),
           ReplacementPattern(
             RegExp(
+              'app-staging\\.${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}\\b',
+            ),
+            'app-staging.{{project_name.paramCase()}}.{{org_tld}}',
+          ),
+          ReplacementPattern(
+            RegExp(
               'app-development\\.${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}\\b',
             ),
             'app-development.{{project_name.paramCase()}}.{{org_tld}}',
+          ),
+          ReplacementPattern(
+            RegExp(
+              'app-development\\.${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}\\b',
+            ),
+            'app-development.{{project_name.paramCase()}}.{{org_tld}}',
+          ),
+          // 기본 도메인 패턴 (blueprint.im)
+          ReplacementPattern(
+            RegExp(
+              '\\b${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}\\b',
+            ),
+            '{{project_name.paramCase()}}.{{org_tld}}',
           ),
           ReplacementPattern(
             RegExp(

@@ -1030,10 +1030,13 @@ class SyncMonorepoService {
     try {
       final originalFileName = path.basename(entity.path);
 
-      // Flutter LLDB 관련 파일 제외 (widgetbook의 ephemeral 디렉토리)
-      if (entity.path.contains('ios/Flutter/ephemeral') &&
+      // Flutter LLDB 관련 파일 및 ephemeral 파일 제외
+      // iOS/macOS ephemeral 디렉토리의 임시 파일들 제외
+      if ((entity.path.contains('ios/Flutter/ephemeral') ||
+              entity.path.contains('macos/Flutter/ephemeral')) &&
           (originalFileName == 'flutter_lldb_helper.py' ||
-              originalFileName == 'flutter_lldbinit')) {
+              originalFileName == 'flutter_lldbinit' ||
+              originalFileName.endsWith('.xcfilelist'))) {
         return false;
       }
 

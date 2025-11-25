@@ -436,6 +436,7 @@ class FileUtils {
     '.yml',
     '.json',
     '.md',
+    '.mdc', // Cursor rules MDC 파일
     '.sh',
     '.gradle',
     '.kts',
