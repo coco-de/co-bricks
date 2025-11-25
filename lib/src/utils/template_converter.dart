@@ -1999,6 +1999,45 @@ class TemplateConverter {
         ),
       );
 
+      // Golden test helper 주석 패턴
+      // "Blueprint Widgetbook" → "{{project_name.titleCase()}} Widgetbook"
+      patterns.add(
+        ReplacementPattern(
+          RegExp('${_escapeRegex(basePascal)} Widgetbook'),
+          '{{project_name.titleCase()}} Widgetbook',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('${_escapeRegex(baseTitle)} Widgetbook'),
+          '{{project_name.titleCase()}} Widgetbook',
+        ),
+      );
+
+      // Markdown description 패턴 (privacy.md, terms.md)
+      // "BlueprintBook" → "{{project_name.pascalCase()}}Book"
+      patterns.add(
+        ReplacementPattern(
+          RegExp('${_escapeRegex(basePascal)}Book'),
+          '{{project_name.pascalCase()}}Book',
+        ),
+      );
+
+      // 커밋 메시지 규칙 설명 패턴
+      // "Blueprint 커밋 메시지 규칙" → "{{project_name.titleCase()}} 커밋 메시지 규칙"
+      patterns.add(
+        ReplacementPattern(
+          RegExp('${_escapeRegex(basePascal)} 커밋'),
+          '{{project_name.titleCase()}} 커밋',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('${_escapeRegex(baseTitle)} 커밋'),
+          '{{project_name.titleCase()}} 커밋',
+        ),
+      );
+
       // Terraform S3 버킷 이름 패턴
       // blueprint-public-storage-prod-4546499
       // → {{project_name.paramCase()}}-public-storage-prod-{{randomawsid}}
