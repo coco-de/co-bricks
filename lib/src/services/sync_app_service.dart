@@ -5,6 +5,7 @@ import 'package:path/path.dart' as path;
 
 import 'package:co_bricks/src/services/envrc_service.dart';
 import 'package:co_bricks/src/utils/file_utils.dart';
+import 'package:co_bricks/src/utils/gitignore_merger.dart';
 import 'package:co_bricks/src/utils/template_converter.dart';
 
 /// 앱 구조 설정
@@ -129,6 +130,16 @@ class SyncAppService {
 
     logger.info('   📋 Copying from ${path.basename(sourcePath.path)}...');
     await FileUtils.copyDirectory(sourcePath, targetBrickDir, overwrite: true);
+
+    // .envrc 파일 제거 (프로젝트별 고유 환경 변수이므로 동기화하지 않음)
+    final envrcFile = File(path.join(targetBrickDir.path, '.envrc'));
+    if (envrcFile.existsSync()) {
+      await envrcFile.delete();
+      logger.info('   🗑️  Removed .envrc (project-specific environment)');
+    }
+
+    // .gitignore 파일들 스마트 병합
+    await _mergeGitignoreFiles(sourcePath, targetBrickDir);
 
     // 백업한 앱 아이콘 복원
     if (iconBackupDir != null) {
@@ -561,6 +572,42 @@ class SyncAppService {
         );
         targetSubDir.createSync(recursive: true);
         await _copyDirectoryContents(entity, targetSubDir);
+      }
+    }
+  }
+
+  /// .gitignore 파일들 스마트 병합
+  /// - 루트, android, ios 디렉토리의 .gitignore 처리
+  /// - Hook 관리 패턴 제거
+  /// - 브릭 개선사항 보존
+  Future<void> _mergeGitignoreFiles(
+    Directory sourceDir,
+    Directory targetDir,
+  ) async {
+    logger.info('   📝 Merging .gitignore files...');
+
+    final merger = GitignoreMerger(logger);
+    final gitignoreLocations = [
+      '', // 루트
+      'android',
+      'ios',
+    ];
+
+    for (final location in gitignoreLocations) {
+      final sourceGitignore = File(
+        path.join(sourceDir.path, location, '.gitignore'),
+      );
+      final targetGitignore = File(
+        path.join(targetDir.path, location, '.gitignore'),
+      );
+
+      // 두 파일 모두 존재하는 경우만 병합
+      if (sourceGitignore.existsSync() && targetGitignore.existsSync()) {
+        await merger.merge(
+          brickGitignore: targetGitignore,
+          templateGitignore: sourceGitignore,
+          hookManagedPatterns: HookManagedPatterns.allAppPatterns,
+        );
       }
     }
   }

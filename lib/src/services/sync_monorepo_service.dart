@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:co_bricks/src/services/envrc_service.dart';
 import 'package:co_bricks/src/utils/file_utils.dart';
+import 'package:co_bricks/src/utils/gitignore_merger.dart';
 import 'package:co_bricks/src/utils/template_converter.dart';
 import 'package:mason_logger/mason_logger.dart';
 import 'package:path/path.dart' as path;
@@ -208,7 +209,12 @@ class SyncMonorepoService {
       final targetFile = File(path.join(targetBase.path, fileName));
 
       if (sourceFile.existsSync()) {
-        await syncFile(sourceFile, targetFile, fileName, config);
+        // .gitignore는 스마트 병합 처리
+        if (fileName == '.gitignore') {
+          await _mergeGitignore(sourceFile, targetFile);
+        } else {
+          await syncFile(sourceFile, targetFile, fileName, config);
+        }
       }
     }
 
@@ -2992,5 +2998,20 @@ class SyncMonorepoService {
     }
 
     return result.join('\n');
+  }
+
+  /// .gitignore 파일 스마트 병합
+  /// - Hook 관리 패턴 제거
+  /// - 브릭 개선사항 보존
+  Future<void> _mergeGitignore(File templateGitignore, File brickGitignore) async {
+    logger.info('\n📝 Merging .gitignore...');
+
+    final merger = GitignoreMerger(logger);
+
+    await merger.merge(
+      brickGitignore: brickGitignore,
+      templateGitignore: templateGitignore,
+      hookManagedPatterns: HookManagedPatterns.allMonorepoPatterns,
+    );
   }
 }
