@@ -357,6 +357,39 @@ class TemplateConverter {
               groupKeyReplacement,
             ),
           );
+
+          // Kotlin package 문 패턴 (suffix 있는 경우 - randomId 없음)
+          // package im.cocode.blueprint.console
+          // → package {{org_tld}}.{{org_name.lowerCase()}}.{{project_name.snakeCase()}}.suffix
+          for (final suffix in ['console', 'widgetbook']) {
+            patterns.add(
+              ReplacementPattern(
+                RegExp(
+                  'package ${_escapeRegex(orgTld)}\\.'
+                  '${_escapeRegex(orgLower)}\\.'
+                  '${_escapeRegex(baseSnake)}\\.'
+                  '$suffix\\b',
+                ),
+                'package {{org_tld}}.{{org_name.lowerCase()}}.'
+                '{{project_name.snakeCase()}}.$suffix',
+              ),
+            );
+          }
+
+          // 일반 Kotlin package 문 패턴 (randomId 없음)
+          // package im.cocode.blueprint
+          // → package {{org_tld}}.{{org_name.lowerCase()}}.{{project_name.snakeCase()}}
+          patterns.add(
+            ReplacementPattern(
+              RegExp(
+                'package ${_escapeRegex(orgTld)}\\.'
+                '${_escapeRegex(orgLower)}\\.'
+                '${_escapeRegex(baseSnake)}\\b',
+              ),
+              'package {{org_tld}}.{{org_name.lowerCase()}}.'
+              '{{project_name.snakeCase()}}',
+            ),
+          );
         }
       }
 
@@ -1887,6 +1920,21 @@ class TemplateConverter {
         ),
       );
 
+      // Fastfile $app_name 패턴 (Ruby 변수 할당)
+      // $app_name = "Blueprint" → $app_name = "{{project_name.titleCase()}}"
+      patterns.add(
+        ReplacementPattern(
+          RegExp(r'\$app_name\s*=\s*"' '${_escapeRegex(basePascal)}"'),
+          r'$app_name = "{{project_name.titleCase()}}"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(r'\$app_name\s*=\s*"' '${_escapeRegex(baseTitle)}"'),
+          r'$app_name = "{{project_name.titleCase()}}"',
+        ),
+      );
+
       // 1. Pascal case (HelloWorld) - suffix가 있는 패턴 먼저 (더 구체적인 순서)
       // Mock 클래스 패턴 (_FakeGoodTeacherService_0)
       for (final suffix in [
@@ -2838,6 +2886,20 @@ class TemplateConverter {
               '\\b${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}\\b',
             ),
             '{{project_name.paramCase()}}.{{org_tld}}',
+          ),
+          // iOS entitlements 도메인 패턴 (webcredentials:, applinks: 뒤에 오는 도메인)
+          // webcredentials:blueprint.im → webcredentials:{{project_name.paramCase()}}.{{org_tld}}
+          ReplacementPattern(
+            RegExp(
+              '(webcredentials|applinks):${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}',
+            ),
+            r'$1:{{project_name.paramCase()}}.{{org_tld}}',
+          ),
+          ReplacementPattern(
+            RegExp(
+              '(webcredentials|applinks):${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}',
+            ),
+            r'$1:{{project_name.paramCase()}}.{{org_tld}}',
           ),
         ]);
       }
