@@ -28,20 +28,25 @@ class SyncAppService {
   final Logger logger;
 
   /// template 디렉토리에서 사용 가능한 프로젝트 찾기
-  static Directory? findTemplateProject(Directory projectDir, String projectName) {
+  static Directory? findTemplateProject(
+    Directory projectDir,
+    String projectName,
+  ) {
     // 현재 디렉토리에서 상위로 올라가면서 template/ 디렉토리 찾기
     var currentDir = projectDir;
-    
+
     while (true) {
       final templateDir = Directory(path.join(currentDir.path, 'template'));
       if (templateDir.existsSync()) {
         // 특정 프로젝트의 app 디렉토리 찾기
-        final appDir = Directory(path.join(templateDir.path, projectName, 'app'));
+        final appDir = Directory(
+          path.join(templateDir.path, projectName, 'app'),
+        );
         if (appDir.existsSync()) {
           return appDir;
         }
       }
-      
+
       final parent = currentDir.parent;
       if (parent.path == currentDir.path) {
         // 루트 디렉토리에 도달
@@ -199,10 +204,12 @@ class SyncAppService {
         );
 
         if (newDirName != originalDirName) {
-          final newPath = Directory(path.join(
-            path.dirname(entity.path),
-            newDirName,
-          ));
+          final newPath = Directory(
+            path.join(
+              path.dirname(entity.path),
+              newDirName,
+            ),
+          );
           await entity.rename(newPath.path);
           renamedFiles++;
           final subStats = await _processFiles(newPath, config, patterns);
@@ -230,10 +237,12 @@ class SyncAppService {
         );
 
         if (newFileName != originalFileName) {
-          final newPath = File(path.join(
-            path.dirname(entity.path),
-            newFileName,
-          ));
+          final newPath = File(
+            path.join(
+              path.dirname(entity.path),
+              newFileName,
+            ),
+          );
           await entity.rename(newPath.path);
           renamedFiles++;
         }
@@ -284,8 +293,8 @@ class SyncAppService {
 
     if (appBase == null) {
       final searchPath = projectDir != null
-        ? '${projectDir.path}/app/'
-        : 'template/${config.projectName}/app/';
+          ? '${projectDir.path}/app/'
+          : 'template/${config.projectName}/app/';
       throw FileSystemException(
         'Template project not found. Please ensure $searchPath exists.',
         rootDir.path,
@@ -293,8 +302,8 @@ class SyncAppService {
     }
 
     final projectDirName = projectDir != null
-      ? path.basename(projectDir.path)
-      : config.projectName;
+        ? path.basename(projectDir.path)
+        : config.projectName;
 
     logger.info('📄 Project: $projectDirName');
     logger.info('📂 Source: ${path.relative(appBase.path)}');
@@ -322,28 +331,30 @@ class SyncAppService {
     // bricks 디렉토리 찾기 (상위로 올라가면서)
     var currentDir = rootDir;
     Directory? bricksDir;
-    
+
     while (true) {
-      final candidateBricksDir = Directory(path.join(currentDir.path, 'bricks'));
+      final candidateBricksDir = Directory(
+        path.join(currentDir.path, 'bricks'),
+      );
       if (candidateBricksDir.existsSync()) {
         bricksDir = candidateBricksDir;
         break;
       }
-      
+
       final parent = currentDir.parent;
       if (parent.path == currentDir.path) {
         break;
       }
       currentDir = parent;
     }
-    
+
     if (bricksDir == null) {
       throw FileSystemException(
         'Bricks directory not found. Please ensure bricks/ directory exists.',
         rootDir.path,
       );
     }
-    
+
     var syncedCount = 0;
 
     for (final syncConfig in syncConfigs) {
@@ -371,11 +382,13 @@ class SyncAppService {
 
     logger.info('\n📝 Synced Bricks:');
     for (final syncConfig in syncConfigs) {
-      final appTypeLabel = {
-        'main': 'User app',
-        'console': 'Admin console',
-        'widgetbook': 'UI showcase',
-      }[syncConfig.appType] ?? syncConfig.appType;
+      final appTypeLabel =
+          {
+            'main': 'User app',
+            'console': 'Admin console',
+            'widgetbook': 'UI showcase',
+          }[syncConfig.appType] ??
+          syncConfig.appType;
       logger.info('  ✓ bricks/${syncConfig.name}/__brick__/ ($appTypeLabel)');
     }
   }
@@ -402,8 +415,10 @@ class SyncAppService {
     }
 
     // macOS Assets.xcassets
-    final macosIconPath =
-        path.join(brickDir.path, 'macos/Runner/Assets.xcassets');
+    final macosIconPath = path.join(
+      brickDir.path,
+      'macos/Runner/Assets.xcassets',
+    );
     if (Directory(macosIconPath).existsSync()) {
       iconPaths.add(macosIconPath);
     }
@@ -459,8 +474,10 @@ class SyncAppService {
     }
 
     // Windows 아이콘
-    final windowsIconPath =
-        path.join(brickDir.path, 'windows/runner/resources/app_icon.ico');
+    final windowsIconPath = path.join(
+      brickDir.path,
+      'windows/runner/resources/app_icon.ico',
+    );
     if (File(windowsIconPath).existsSync()) {
       iconPaths.add(windowsIconPath);
     }
@@ -487,8 +504,10 @@ class SyncAppService {
     }
 
     // macOS GoogleService-Info.plist
-    final macosFirebasePath =
-        path.join(brickDir.path, 'macos/Runner/GoogleService-Info.plist');
+    final macosFirebasePath = path.join(
+      brickDir.path,
+      'macos/Runner/GoogleService-Info.plist',
+    );
     if (File(macosFirebasePath).existsSync()) {
       iconPaths.add(macosFirebasePath);
     }
@@ -669,17 +688,28 @@ class SyncAppService {
       case 'MATCH_PASSWORD':
       case 'MATCH_KEYCHAIN_PASSWORD':
         // 비밀번호는 플레이스홀더로
-        return 'CHANGE_ME_{{project_name.snakeCase().upperCase()}}_PASSWORD';
+        return '{{org_name.paramCase()}}1477!';
       case 'MATCH_KEYCHAIN_NAME':
-        return '{{project_name.snakeCase()}}';
+        return '{{org_name.paramCase()}}';
       case 'APPSTORE_CONNECT_API_KEY_BASE64':
       case 'MATCH_GIT_BASIC_AUTHORIZATION_BASE64':
       case 'FASTLANE_ANDROID_BASE64':
       case 'FASTLANE_IOS_BASE64':
       case 'FIREBASE_DEV_APP_DISTRIBUTION_CREDENTIALS_BASE64':
       case 'FIREBASE_STG_APP_DISTRIBUTION_CREDENTIALS_BASE64':
+      case 'FIREBASE_PROD_APP_DISTRIBUTION_CREDENTIALS_BASE64':
+      case 'ANDROID_KEY_PROPERTIES_BASE64':
+      case 'ANDROID_RELEASE_KEY_BASE64':
+      case 'AWS_DEPLOY_SCRIPTS_BASE64':
         // Base64 인코딩된 값들은 플레이스홀더로
         return 'CHANGE_ME_BASE64_ENCODED_VALUE';
+      case 'SERVERPOD_PASSWORDS':
+        // Serverpod 비밀번호는 플레이스홀더로
+        return 'CHANGE_ME_SERVERPOD_PASSWORDS';
+      case 'AWS_ACCESS_KEY_ID':
+        return '{{aws_access_key_id}}';
+      case 'AWS_SECRET_ACCESS_KEY':
+        return '{{aws_secret_access_key}}';
       default:
         // Firebase App ID 등 프로젝트별 고유 값들
         if (key.startsWith('FIREBASE_') && key.endsWith('_ID')) {
@@ -690,4 +720,3 @@ class SyncAppService {
     }
   }
 }
-

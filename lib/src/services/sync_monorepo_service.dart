@@ -211,7 +211,7 @@ class SyncMonorepoService {
       if (sourceFile.existsSync()) {
         // .gitignore는 스마트 병합 처리
         if (fileName == '.gitignore') {
-          await _mergeGitignore(sourceFile, targetFile);
+          await _mergeGitignore(sourceFile, targetFile, config);
         } else {
           await syncFile(sourceFile, targetFile, fileName, config);
         }
@@ -3003,7 +3003,12 @@ class SyncMonorepoService {
   /// .gitignore 파일 스마트 병합
   /// - Hook 관리 패턴 제거
   /// - 브릭 개선사항 보존
-  Future<void> _mergeGitignore(File templateGitignore, File brickGitignore) async {
+  /// - 템플릿 변수 변환 적용
+  Future<void> _mergeGitignore(
+    File templateGitignore,
+    File brickGitignore,
+    ProjectConfig config,
+  ) async {
     logger.info('\n📝 Merging .gitignore...');
 
     final merger = GitignoreMerger(logger);
@@ -3013,5 +3018,14 @@ class SyncMonorepoService {
       templateGitignore: templateGitignore,
       hookManagedPatterns: HookManagedPatterns.allMonorepoPatterns,
     );
+
+    // 병합 후 템플릿 변수 변환 적용
+    if (brickGitignore.existsSync()) {
+      final content = await brickGitignore.readAsString();
+      final patterns = _getPatterns(config);
+      final convertedContent =
+          TemplateConverter.convertContent(content, patterns);
+      await brickGitignore.writeAsString(convertedContent);
+    }
   }
 }

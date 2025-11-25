@@ -75,7 +75,7 @@ class TemplateConverter {
     patterns.addAll(_buildUrlSchemePatterns(projectNames));
 
     // 6. 프로젝트명 패턴
-    patterns.addAll(_buildProjectPatterns(projectNames, orgTlds));
+    patterns.addAll(_buildProjectPatterns(projectNames, orgNames, orgTlds));
 
     // 7. 조직명 패턴
     patterns.addAll(_buildOrgPatterns(orgNames));
@@ -318,6 +318,7 @@ class TemplateConverter {
   /// 프로젝트명 패턴 생성
   static List<ReplacementPattern> _buildProjectPatterns(
     List<String> projectNames,
+    List<String> orgNames,
     List<String> orgTlds,
   ) {
     final patterns = <ReplacementPattern>[];
@@ -326,10 +327,38 @@ class TemplateConverter {
       final baseSnake = projectName;
       final baseParam = projectName.replaceAll('_', '-');
       final baseDot = projectName.replaceAll('_', '.');
-      final baseTitle = projectName
-          .split('_')
+      final words = projectName.split('_');
+      final baseTitle = words
           .map((word) => word[0].toUpperCase() + word.substring(1))
           .join(' ');
+      final basePascal = words
+          .map(
+            (word) => word.isEmpty
+                ? ''
+                : word[0].toUpperCase() + word.substring(1).toLowerCase(),
+          )
+          .join();
+
+      // Android notification channel groupKey 패턴
+      // groupKey: 'im.cocode.blueprint'
+      //   → groupKey: '{{org_tld}}.{{org_name}}.{{project_name.snakeCase()}}'
+      for (final orgTld in orgTlds) {
+        for (final orgName in orgNames) {
+          final orgLower = orgName.toLowerCase();
+          final groupKeyPattern = "groupKey: '"
+              '${_escapeRegex(orgTld)}\\.'
+              '${_escapeRegex(orgLower)}\\.'
+              "${_escapeRegex(baseSnake)}'";
+          const groupKeyReplacement = "groupKey: "
+              "'{{org_tld}}.{{org_name}}.{{project_name.snakeCase()}}'";
+          patterns.add(
+            ReplacementPattern(
+              RegExp(groupKeyPattern),
+              groupKeyReplacement,
+            ),
+          );
+        }
+      }
 
       // Dart/Flutter 컨텍스트 패턴 (최우선 - snakeCase 유지)
       // package: imports, pubspec.yaml name 등 Dart 코드 컨텍스트
@@ -370,6 +399,33 @@ class TemplateConverter {
           ),
         );
       }
+
+      // suffix 없는 기본 패키지 패턴 (suffix 패턴 후에 처리)
+      // package:blueprint/ → package:{{project_name.snakeCase()}}/
+      patterns.add(
+        ReplacementPattern(
+          RegExp('package:${_escapeRegex(baseSnake)}/'),
+          'package:{{project_name.snakeCase()}}/',
+        ),
+      );
+
+      // suffix 없는 pubspec.yaml name 필드
+      // name: blueprint → name: {{project_name.snakeCase()}}
+      patterns.add(
+        ReplacementPattern(
+          RegExp('name:\\s*${_escapeRegex(baseSnake)}\\b'),
+          'name: {{project_name.snakeCase()}}',
+        ),
+      );
+
+      // CMakeLists.txt BINARY_NAME 패턴 (Windows 빌드)
+      // set(BINARY_NAME "blueprint") → set(BINARY_NAME "{{project_name.snakeCase()}}")
+      patterns.add(
+        ReplacementPattern(
+          RegExp('set\\(BINARY_NAME "${_escapeRegex(baseSnake)}"\\)'),
+          'set(BINARY_NAME "{{project_name.snakeCase()}}")',
+        ),
+      );
 
       // Docker 이미지명 패턴 (snake_case 사용)
       // docker build -t project_name_server → docker build -t {{project_name.snakeCase()}}_server
@@ -1041,6 +1097,139 @@ class TemplateConverter {
         );
       }
 
+      // Docker volume 이름 패턴 (docker-compose.yaml)
+      // blueprint_data: → {{project_name.snakeCase()}}_data:
+      // blueprint_test_data: → {{project_name.snakeCase()}}_test_data:
+      for (final suffix in ['_data', '_test_data']) {
+        // volume 선언 (key:)
+        patterns.add(
+          ReplacementPattern(
+            RegExp('\\b${_escapeRegex(baseSnake)}$suffix:'),
+            '{{project_name.snakeCase()}}$suffix:',
+          ),
+        );
+        // volume 참조 (- name:path 형태)
+        patterns.add(
+          ReplacementPattern(
+            RegExp('\\b${_escapeRegex(baseSnake)}$suffix\\b'),
+            '{{project_name.snakeCase()}}$suffix',
+          ),
+        );
+      }
+
+      // POSTGRES_DB 환경변수 패턴 (docker-compose.yaml)
+      // POSTGRES_DB: blueprint → POSTGRES_DB: {{project_name.paramCase()}}
+      // POSTGRES_DB: blueprint_test → POSTGRES_DB: {{project_name.paramCase()}}-test
+      patterns.add(
+        ReplacementPattern(
+          RegExp('POSTGRES_DB:\\s*${_escapeRegex(baseSnake)}\\b'),
+          'POSTGRES_DB: {{project_name.paramCase()}}',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('POSTGRES_DB:\\s*${_escapeRegex(baseParam)}\\b'),
+          'POSTGRES_DB: {{project_name.paramCase()}}',
+        ),
+      );
+      for (final suffix in ['_test', '_dev', '_staging', '_prod']) {
+        final paramSuffix = suffix.replaceAll('_', '-');
+        patterns.add(
+          ReplacementPattern(
+            RegExp('POSTGRES_DB:\\s*${_escapeRegex(baseSnake)}$suffix\\b'),
+            'POSTGRES_DB: {{project_name.paramCase()}}$paramSuffix',
+          ),
+        );
+      }
+
+      // URL scheme 패턴 (strings.xml)
+      // devblueprint → dev{{project_name.snakeCase()}}
+      // stgblueprint → stg{{project_name.snakeCase()}}
+      // blueprint (scheme) → {{project_name.snakeCase()}}
+      for (final prefix in ['dev', 'stg', 'staging', 'prod']) {
+        // devblueprint, stgblueprint 등
+        patterns.add(
+          ReplacementPattern(
+            RegExp('\\b$prefix${_escapeRegex(baseSnake)}\\b'),
+            '$prefix{{project_name.snakeCase()}}',
+          ),
+        );
+        // 파스칼케이스: devBlueprint, stgBlueprint 등
+        patterns.add(
+          ReplacementPattern(
+            RegExp('\\b$prefix${_escapeRegex(basePascal)}\\b'),
+            '$prefix{{project_name.snakeCase()}}',
+          ),
+        );
+      }
+
+      // macOS xcconfig 패턴 (AppInfo.xcconfig)
+      // PRODUCT_NAME = blueprint_widgetbook
+      // → PRODUCT_NAME = {{project_name.snakeCase()}}_widgetbook
+      for (final suffix in ['_widgetbook', '_console', '_server', '_client']) {
+        patterns.add(
+          ReplacementPattern(
+            RegExp('PRODUCT_NAME\\s*=\\s*${_escapeRegex(baseSnake)}$suffix\\b'),
+            'PRODUCT_NAME = {{project_name.snakeCase()}}$suffix',
+          ),
+        );
+      }
+      // PRODUCT_NAME 단독 (suffix 없는 경우)
+      patterns.add(
+        ReplacementPattern(
+          RegExp('PRODUCT_NAME\\s*=\\s*${_escapeRegex(baseSnake)}\\b'),
+          'PRODUCT_NAME = {{project_name.snakeCase()}}',
+        ),
+      );
+
+      // HTML title/description 패턴 (web/index.html)
+      // <title>Blueprint</title> → <title>{{project_name.titleCase()}}</title>
+      // content="Blueprint Service"
+      // → content="{{project_name.titleCase()}} Service"
+      patterns.add(
+        ReplacementPattern(
+          RegExp('<title>${_escapeRegex(basePascal)}</title>'),
+          '<title>{{project_name.titleCase()}}</title>',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('<title>${_escapeRegex(baseTitle)}</title>'),
+          '<title>{{project_name.titleCase()}}</title>',
+        ),
+      );
+      // meta content 패턴
+      patterns.add(
+        ReplacementPattern(
+          RegExp('content="${_escapeRegex(basePascal)} Service"'),
+          'content="{{project_name.titleCase()}} Service"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('content="${_escapeRegex(baseTitle)} Service"'),
+          'content="{{project_name.titleCase()}} Service"',
+        ),
+      );
+      // apple-mobile-web-app-title 패턴
+      patterns.add(
+        ReplacementPattern(
+          RegExp('content="${_escapeRegex(basePascal)}"'),
+          'content="{{project_name.titleCase()}}"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('content="${_escapeRegex(baseTitle)}"'),
+          'content="{{project_name.titleCase()}}"',
+        ),
+      );
+
+      // Kotlin package 문 패턴 (MainActivity.kt)
+      // package im.cocode.blueprint.widgetbook.k9rm
+      // → package {{org_tld}}.{{org_name}}.{{project_name.snakeCase()}}.suffix.{{randomprojectid}}
+      // 이 패턴은 _buildFirebasePatterns에서 처리됨
+
       // 복합 이름 패턴 - Dart 모듈명 (snakeCase 유지)
       for (final suffix in [
         '_http_module',
@@ -1648,6 +1837,17 @@ class TemplateConverter {
       );
 
       // 3. Title case (Hello World)
+      // Title Case + Widgetbook/Console 패턴 (스크립트 주석/출력)
+      // "Blueprint Widgetbook" → "{{project_name.titleCase()}} Widgetbook"
+      for (final suffix in ['Widgetbook', 'Console', 'Server', 'Client']) {
+        patterns.add(
+          ReplacementPattern(
+            RegExp('${_escapeRegex(baseTitle)} $suffix'),
+            '{{project_name.titleCase()}} $suffix',
+          ),
+        );
+      }
+      // Title case 단독 패턴
       patterns.add(
         ReplacementPattern(
           RegExp('\\b${_escapeRegex(baseTitle)}\\b'),
@@ -1724,6 +1924,45 @@ class TemplateConverter {
                     '\\b${_escapeRegex(projectParam)}-$suffix-${_escapeRegex(randomId)}\\b',
                   ),
                   '{{project_name.paramCase()}}-$suffix-{{randomprojectid}}',
+                ),
+              ]);
+
+              // iOS Bundle ID with suffix 패턴
+              // im.cocode.blueprint.widgetbook.k9rm
+              // → {{org_tld}}.{{org_name}}.{{project_name.snakeCase()}}.suffix.{{randomprojectid}}
+              patterns.addAll([
+                ReplacementPattern(
+                  RegExp(
+                    '\\b${_escapeRegex(orgTld)}\\.'
+                    '${_escapeRegex(orgLower)}\\.'
+                    '${_escapeRegex(projectName)}\\.'
+                    '$suffix\\.'
+                    '${_escapeRegex(randomId)}\\.dev\\b',
+                  ),
+                  '{{org_tld}}.{{org_name}}.'
+                  '{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}.dev',
+                ),
+                ReplacementPattern(
+                  RegExp(
+                    '\\b${_escapeRegex(orgTld)}\\.'
+                    '${_escapeRegex(orgLower)}\\.'
+                    '${_escapeRegex(projectName)}\\.'
+                    '$suffix\\.'
+                    '${_escapeRegex(randomId)}\\.stg\\b',
+                  ),
+                  '{{org_tld}}.{{org_name}}.'
+                  '{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}.stg',
+                ),
+                ReplacementPattern(
+                  RegExp(
+                    '\\b${_escapeRegex(orgTld)}\\.'
+                    '${_escapeRegex(orgLower)}\\.'
+                    '${_escapeRegex(projectName)}\\.'
+                    '$suffix\\.'
+                    '${_escapeRegex(randomId)}\\b',
+                  ),
+                  '{{org_tld}}.{{org_name}}.'
+                  '{{project_name.snakeCase()}}.$suffix.{{randomprojectid}}',
                 ),
               ]);
             }
