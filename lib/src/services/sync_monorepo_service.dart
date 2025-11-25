@@ -1001,6 +1001,10 @@ class SyncMonorepoService {
       }
     }
 
+    final totalFiles = files.length;
+    var processedFiles = 0;
+    var lastLoggedProgress = -1;
+
     // 배치로 병렬 처리 (batch size: 50)
     const batchSize = 50;
     for (var i = 0; i < files.length; i += batchSize) {
@@ -1016,6 +1020,17 @@ class SyncMonorepoService {
 
       // 변환된 파일 수 집계
       convertedFiles += results.where((r) => r).length;
+      processedFiles += batch.length;
+
+      // 10% 단위로 진행률 출력 (중복 출력 방지)
+      final progress = (processedFiles / totalFiles * 100).toInt();
+      final progressTen = (progress ~/ 10) * 10;
+      if (progressTen > lastLoggedProgress && progressTen > 0) {
+        logger.info(
+          '   📊 Progress: $processedFiles/$totalFiles ($progress%)',
+        );
+        lastLoggedProgress = progressTen;
+      }
     }
 
     return {'converted': convertedFiles};
@@ -1104,12 +1119,13 @@ class SyncMonorepoService {
       // 파일 내용 변환 (파일 이동 전에 수행)
       File? targetFile;
       String? convertedContent;
+      String? originalContent; // 중복 읽기 방지를 위해 원본 내용 저장
 
       if (FileUtils.shouldProcessFile(entity)) {
         if (await FileUtils.isTextFile(entity) &&
             FileUtils.isFileSizeValid(entity)) {
           try {
-            final originalContent = await entity.readAsString();
+            originalContent = await entity.readAsString();
             var content = originalContent;
             final basename = path.basename(entity.path);
 
@@ -1199,10 +1215,10 @@ class SyncMonorepoService {
           // 파일명 변경 실패 시 무시
           logger.warn('   ⚠️  Could not rename file $originalFileName: $e');
         }
-      } else if (convertedContent != null) {
+      } else if (convertedContent != null && originalContent != null) {
         // 파일명은 변경되지 않았지만 내용이 변환된 경우
+        // originalContent는 이미 위에서 읽었으므로 재사용 (중복 I/O 제거)
         try {
-          final originalContent = await entity.readAsString();
           if (convertedContent != originalContent) {
             await entity.writeAsString(convertedContent);
             return true;
@@ -2185,17 +2201,17 @@ class SyncMonorepoService {
     // 텍스트 파일이면 내용 변환
     if (FileUtils.shouldProcessFile(targetFile)) {
       try {
-        var content = await targetFile.readAsString();
+        // 복사 후 targetFile의 내용 = sourceFile의 원본 내용
+        // 중복 I/O 방지를 위해 한 번만 읽고 originalContent로 저장
+        final originalContent = await targetFile.readAsString();
+        var content = originalContent;
 
         // melos.yaml과 pubspec.yaml은 특별 처리
         if (fileName == 'melos.yaml' || fileName == 'pubspec.yaml') {
           // 기존 brick의 melos.yaml에서 조건부 블록 추출 (보존용)
-          String? existingConditionalBlocks;
-          if (targetFile.existsSync()) {
-            final existingContent = await targetFile.readAsString();
-            existingConditionalBlocks =
-                _extractConditionalBlocks(existingContent);
-          }
+          // Note: 이미 copy로 덮어썼으므로 이 시점에서는 originalContent가 source 내용임
+          final existingConditionalBlocks =
+              _extractConditionalBlocks(originalContent);
 
           content = _convertMelosYaml(content, config);
 
@@ -2212,7 +2228,7 @@ class SyncMonorepoService {
           );
         }
 
-        final originalContent = await sourceFile.readAsString();
+        // originalContent는 이미 위에서 읽었으므로 재사용 (중복 I/O 제거)
         if (content != originalContent) {
           await targetFile.writeAsString(content);
           logger.info('   ✅ $fileName converted');
@@ -2230,6 +2246,8 @@ class SyncMonorepoService {
     final lines = content.split('\n');
     final result = <String>[];
     final projectName = config.projectName;
+    // 패턴을 한 번만 가져와서 재사용 (성능 최적화)
+    final patterns = _getPatterns(config);
     var inPackagesSection = false;
     var inWorkspaceSection = false;
     var inScriptsSection = false;
@@ -2301,7 +2319,6 @@ class SyncMonorepoService {
             result.add('{{#enable_admin}}');
             inEnableAdminBlock = true;
           }
-          final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add(line);
           continue;
@@ -2318,7 +2335,6 @@ class SyncMonorepoService {
             result.add('{{#enable_admin}}');
             inEnableAdminBlock = true;
           }
-          final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add(line);
           continue;
@@ -2336,7 +2352,6 @@ class SyncMonorepoService {
             result.add('{{#has_serverpod}}');
             inHasServerpodBlock = true;
           }
-          final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add(line);
 
@@ -2360,7 +2375,6 @@ class SyncMonorepoService {
 
         // widgetbook 패키지 처리
         if (line.contains('${projectName}_widgetbook')) {
-          final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add(line);
           continue;
@@ -2385,7 +2399,6 @@ class SyncMonorepoService {
         }
 
         // 일반 패키지 처리
-        final patterns = _getPatterns(config);
         line = TemplateConverter.convertContent(line, patterns);
         result.add(line);
         continue;
@@ -2411,7 +2424,6 @@ class SyncMonorepoService {
           // 먼저 {{#enable_admin}} 태그 추가
           result.add('{{#enable_admin}}');
           // 그 다음 현재 라인(주석 라인) 처리
-          final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add(line);
           continue;
@@ -2420,7 +2432,6 @@ class SyncMonorepoService {
         // Console 빌드 블록 종료 감지 (✅ Console 패키지들 빌드 완료)
         if (inConsoleBuildBlock &&
             line.contains('Console 패키지들 빌드 완료')) {
-          final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add(line);
           result.add('{{/enable_admin}}');
@@ -2430,7 +2441,6 @@ class SyncMonorepoService {
 
         // Console 빌드 블록 내부 라인 처리
         if (inConsoleBuildBlock) {
-          final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add(line);
           continue;
@@ -2441,7 +2451,6 @@ class SyncMonorepoService {
             line.contains('echo') &&
             line.contains('console_router')) {
           // echo 라인을 조건부로 감싸기
-          final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add('{{#enable_admin}}');
           result.add(line);
@@ -2455,7 +2464,6 @@ class SyncMonorepoService {
             line.contains('Shared') &&
             line.contains('dependBuild:shared')) {
           // Shared 빌드 라인 전체를 조건부 태그로 감싸기
-          final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add('{{#has_serverpod}}$line{{/has_serverpod}}');
           continue;
@@ -2467,7 +2475,6 @@ class SyncMonorepoService {
             line.contains('Backend') &&
             line.contains('dependBuild:backend')) {
           // Backend 빌드 라인 전체를 조건부 태그로 감싸기
-          final patterns = _getPatterns(config);
           line = TemplateConverter.convertContent(line, patterns);
           result.add('{{#has_serverpod}}$line{{/has_serverpod}}');
           continue;
@@ -2491,7 +2498,6 @@ class SyncMonorepoService {
       }
 
       // 일반 패턴 변환 적용
-      final patterns = _getPatterns(config);
       line = TemplateConverter.convertContent(line, patterns);
       result.add(line);
     }

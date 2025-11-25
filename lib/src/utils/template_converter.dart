@@ -2846,10 +2846,13 @@ class TemplateConverter {
     return patterns;
   }
 
+  /// 정규식 특수 문자 이스케이프용 캐시된 패턴
+  static final _escapeRegexPattern = RegExp(r'[.*+?^${}()|[\]\\]');
+
   /// 정규식 특수 문자 이스케이프
   static String _escapeRegex(String text) {
     return text.replaceAllMapped(
-      RegExp(r'[.*+?^${}()|[\]\\]'),
+      _escapeRegexPattern,
       (match) => '\\${match.group(0)}',
     );
   }
