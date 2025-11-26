@@ -1083,6 +1083,87 @@ class TemplateConverter {
         );
       }
 
+      // GitHub Actions workflow 패턴 (deployment-aws.yml)
+      // PROJECT_NAME: blueprint → PROJECT_NAME: {{project_name.snakeCase()}}
+      // AWS_NAME: blueprint → AWS_NAME: {{project_name.paramCase()}}
+      // DEPLOYMENT_BUCKET: blueprint-deployment-XXXXXXX
+      //   → DEPLOYMENT_BUCKET: {{project_name.paramCase()}}-deployment-{{randomawsid}}
+      // working-directory: backend/blueprint_server
+      //   → working-directory: backend/{{project_name.snakeCase()}}_server
+
+      // PROJECT_NAME 환경변수
+      patterns.add(
+        ReplacementPattern(
+          RegExp('PROJECT_NAME:\\s*${_escapeRegex(baseSnake)}\\b'),
+          'PROJECT_NAME: {{project_name.snakeCase()}}',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('PROJECT_NAME:\\s*${_escapeRegex(baseParam)}\\b'),
+          'PROJECT_NAME: {{project_name.snakeCase()}}',
+        ),
+      );
+
+      // AWS_NAME 환경변수
+      patterns.add(
+        ReplacementPattern(
+          RegExp('AWS_NAME:\\s*${_escapeRegex(baseSnake)}\\b'),
+          'AWS_NAME: {{project_name.paramCase()}}',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('AWS_NAME:\\s*${_escapeRegex(baseParam)}\\b'),
+          'AWS_NAME: {{project_name.paramCase()}}',
+        ),
+      );
+
+      // DEPLOYMENT_BUCKET 환경변수 (7자리 랜덤 ID 포함)
+      // blueprint-deployment-4546499 → {{project_name.paramCase()}}-deployment-{{randomawsid}}
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'DEPLOYMENT_BUCKET:\\s*${_escapeRegex(baseSnake)}-deployment-\\d{7}\\b',
+          ),
+          'DEPLOYMENT_BUCKET: {{project_name.paramCase()}}-deployment-{{randomawsid}}',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'DEPLOYMENT_BUCKET:\\s*${_escapeRegex(baseParam)}-deployment-\\d{7}\\b',
+          ),
+          'DEPLOYMENT_BUCKET: {{project_name.paramCase()}}-deployment-{{randomawsid}}',
+        ),
+      );
+
+      // working-directory 패턴 (GitHub Actions)
+      // working-directory: backend/blueprint_server
+      for (final suffix in ['_server', '_client']) {
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              'working-directory:\\s*backend/${_escapeRegex(baseSnake)}$suffix\\b',
+            ),
+            'working-directory: backend/{{project_name.snakeCase()}}$suffix',
+          ),
+        );
+      }
+
+      // pubspec_overrides.yaml 경로 패턴 (GitHub Actions)
+      // backend/blueprint_server/pubspec_overrides.yaml
+      for (final suffix in ['_server', '_client']) {
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              'backend/${_escapeRegex(baseSnake)}$suffix/pubspec_overrides\\.yaml',
+            ),
+            'backend/{{project_name.snakeCase()}}$suffix/pubspec_overrides.yaml',
+          ),
+        );
+      }
+
       // URL 경로 패턴 (https://.../.well-known/)
       // https://blueprint.im/.well-known/ → https://{{project_name.paramCase()}}.{{org_tld}}/.well-known/
       for (final orgTld in orgTlds) {

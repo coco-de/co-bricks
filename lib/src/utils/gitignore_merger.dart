@@ -76,8 +76,10 @@ class HookManagedPatterns {
 
     // Hook 관리 패턴 관련 주석 식별
     for (final pattern in hookPatterns) {
+      final isComment = trimmed.startsWith('#');
+      final commentContent = isComment ? trimmed.substring(1).trim() : '';
       if (trimmed.contains(pattern) ||
-          (trimmed.startsWith('#') && hookPatterns.contains(trimmed.substring(1).trim()))) {
+          (isComment && hookPatterns.contains(commentContent))) {
         return true;
       }
     }
@@ -195,12 +197,20 @@ class GitignoreMerger {
   ) {
     final improvements = <String>[];
     final templateSet = templateLines.map((l) => l.trim()).toSet();
+    final seenPatterns = <String>{};
+    var inBrickImprovements = false;
 
     for (final line in brickLines) {
       final trimmed = line.trim();
 
       // 빈 줄은 무시
       if (trimmed.isEmpty) continue;
+
+      // "# Brick-specific improvements" 섹션 시작 감지
+      if (trimmed == '# Brick-specific improvements') {
+        inBrickImprovements = true;
+        continue;
+      }
 
       // Hook 관리 패턴은 무시
       if (HookManagedPatterns.isHookManaged(line, hookPatterns)) continue;
@@ -210,7 +220,15 @@ class GitignoreMerger {
 
       // 템플릿에 없는 브릭만의 패턴 (개선사항)
       if (!templateSet.contains(trimmed)) {
-        improvements.add(line);
+        // 이미 본 패턴은 중복 추가하지 않음
+        if (seenPatterns.contains(trimmed)) continue;
+        seenPatterns.add(trimmed);
+
+        // Brick-specific improvements 섹션 내부의 패턴만 추출
+        // (이전 동기화에서 추가된 개선사항 재사용 방지)
+        if (!inBrickImprovements) {
+          improvements.add(line);
+        }
       }
     }
 
@@ -231,8 +249,9 @@ class GitignoreMerger {
         result.add('');
       }
 
-      result.add('# Brick-specific improvements');
-      result.addAll(improvements);
+      result
+        ..add('# Brick-specific improvements')
+        ..addAll(improvements);
     }
 
     return result;
