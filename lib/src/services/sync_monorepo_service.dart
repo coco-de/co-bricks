@@ -1150,6 +1150,11 @@ class SyncMonorepoService {
               content = _convertRepositoryPatterns(content);
             }
 
+            // common_locator.dart의 serverpod 관련 코드를 조건부 템플릿으로 변환
+            if (basename == 'common_locator.dart') {
+              content = _convertCommonLocator(content);
+            }
+
             // GitHub Actions 파일의 ${{ }}를 이스케이프 처리
             // Mason 템플릿 변수와 충돌을 피하기 위해 ${{ -> ${ {, }} -> } }로 변환
             if (entity.path.contains('.github') &&
@@ -1326,6 +1331,65 @@ class SyncMonorepoService {
         return '{{#$conditionalFlag}}$exportStatement{{/$conditionalFlag}}';
       });
     }
+
+    return result;
+  }
+
+  /// common_locator.dart 파일의 serverpod 관련 코드를 조건부 템플릿으로 변환
+  ///
+  /// 변환 대상:
+  /// 1. serverpod_service import 문을 {{#has_serverpod}} 블록으로 감싸기
+  /// 2. _registerCoreDependencies() 함수를 serverpod/non-serverpod 버전으로 분리
+  String _convertCommonLocator(String content) {
+    // 이미 조건부 템플릿이 포함되어 있으면 변환하지 않음
+    if (content.contains('{{#has_serverpod}}')) {
+      return content;
+    }
+
+    var result = content;
+
+    // 1. serverpod_service import 문을 조건부 블록으로 감싸기
+    final importPattern = RegExp(
+      r"import 'package:serverpod_service/serverpod_service\.dart' as serverpod;",
+    );
+    result = result.replaceAllMapped(importPattern, (match) {
+      return '{{#has_serverpod}}\n${match.group(0)}\n{{/has_serverpod}}';
+    });
+
+    // 2. _registerCoreDependencies 함수를 serverpod/non-serverpod 버전으로 분리
+    // 전체 함수 본문을 찾아서 조건부 블록으로 감싸기
+    final functionPattern = RegExp(
+      r'''(/// 핵심 의존성 등록[^\n]*\n(?:///[^\n]*\n)*)'''
+      r'''(Future<void> _registerCoreDependencies\(\) async \{)'''
+      r'''([\s\S]*?)'''
+      r'''(\n\})''',
+      multiLine: true,
+    );
+
+    result = result.replaceAllMapped(functionPattern, (match) {
+      final functionSignature = match.group(2) ?? '';
+      final functionBody = match.group(3) ?? '';
+      final closingBrace = match.group(4) ?? '';
+
+      // serverpod 버전 (기존 코드 유지)
+      final serverpodVersion = '''{{#has_serverpod}}
+/// 핵심 의존성 등록
+///
+/// ServerpodService만 수동 등록 (런타임 설정 및 웹 세션 초기화 필요)
+/// 나머지 의존성은 RegisterModule에서 선언적으로 등록됨
+$functionSignature$functionBody$closingBrace
+{{/has_serverpod}}''';
+
+      // non-serverpod 버전 (빈 함수)
+      final nonServerpodVersion = '''{{^has_serverpod}}
+/// 핵심 의존성 등록
+$functionSignature
+  // Serverpod 미사용 시 추가 핵심 의존성 등록
+$closingBrace
+{{/has_serverpod}}''';
+
+      return '$serverpodVersion\n$nonServerpodVersion';
+    });
 
     return result;
   }
