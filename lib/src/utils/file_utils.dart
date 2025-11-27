@@ -165,6 +165,7 @@ class FileUtils {
     Directory source,
     Directory target, {
     bool overwrite = false,
+    bool syncIcons = false,
   }) async {
     if (!source.existsSync()) {
       throw FileSystemException(
@@ -202,8 +203,9 @@ class FileUtils {
           continue;
         }
 
-        // 앱 아이콘 디렉토리 제외
-        if (_shouldExcludeAppIconDirectory(normalizedPath, dirName)) {
+        // 앱 아이콘 디렉토리 제외 (syncIcons가 false일 때만)
+        if (!syncIcons &&
+            _shouldExcludeAppIconDirectory(normalizedPath, dirName)) {
           continue;
         }
 
@@ -211,6 +213,7 @@ class FileUtils {
           entity,
           Directory(targetPath),
           overwrite: overwrite,
+          syncIcons: syncIcons,
         );
       } else if (entity is File) {
         // 제외할 파일이면 스킵

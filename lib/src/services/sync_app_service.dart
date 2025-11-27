@@ -113,16 +113,20 @@ class SyncAppService {
     Directory sourcePath,
     Directory targetBrickPath,
     String brickName,
-    ProjectConfig config,
-  ) async {
+    ProjectConfig config, {
+    bool syncIcons = false,
+  }) async {
     logger.info('\n📦 Syncing $brickName brick...');
 
     final targetBrickDir = Directory(
       path.join(targetBrickPath.path, '__brick__'),
     );
 
-    // 앱 아이콘 디렉토리 백업 (삭제 전)
-    final iconBackupDir = await _backupAppIconDirectories(targetBrickDir);
+    // syncIcons가 false일 때만 아이콘 백업
+    Directory? iconBackupDir;
+    if (!syncIcons) {
+      iconBackupDir = await _backupAppIconDirectories(targetBrickDir);
+    }
 
     // 기존 __brick__ 내용 삭제
     if (targetBrickDir.existsSync()) {
@@ -134,7 +138,12 @@ class SyncAppService {
     targetBrickDir.createSync(recursive: true);
 
     logger.info('   📋 Copying from ${path.basename(sourcePath.path)}...');
-    await FileUtils.copyDirectory(sourcePath, targetBrickDir, overwrite: true);
+    await FileUtils.copyDirectory(
+      sourcePath,
+      targetBrickDir,
+      overwrite: true,
+      syncIcons: syncIcons,
+    );
 
     // .envrc 파일 템플릿 변수로 변환
     final sourceEnvrc = File(path.join(sourcePath.path, '.envrc'));
@@ -146,8 +155,8 @@ class SyncAppService {
     // .gitignore 파일들 스마트 병합
     await _mergeGitignoreFiles(sourcePath, targetBrickDir);
 
-    // 백업한 앱 아이콘 복원
-    if (iconBackupDir != null) {
+    // syncIcons가 false일 때만 백업한 앱 아이콘 복원
+    if (!syncIcons && iconBackupDir != null) {
       await _restoreAppIconDirectories(iconBackupDir, targetBrickDir);
     }
 
@@ -179,7 +188,7 @@ class SyncAppService {
     logger.info('      - $renamedFiles files renamed');
   }
 
-  /// 파일 처리 (재귀적으로 디렉토리 순회)
+  /// 파일 처리 (병렬 배치 처리 최적화)
   Future<Map<String, int>> _processFiles(
     Directory dir,
     ProjectConfig config,
@@ -187,99 +196,154 @@ class SyncAppService {
   ) async {
     var convertedFiles = 0;
     var renamedFiles = 0;
-    await for (final entity in dir.list()) {
-      if (entity is Directory) {
-        // 제외할 디렉토리면 스킵
-        if (FileUtils.excludedDirs.contains(
-          path.basename(entity.path),
-        )) {
-          continue;
-        }
 
-        // 디렉토리명 변환
-        final originalDirName = path.basename(entity.path);
-        final newDirName = FileUtils.convertDirectoryName(
-          originalDirName,
-          config.projectNames,
+    // 1. 모든 파일/디렉토리 수집 (recursive)
+    final files = <File>[];
+    final directories = <Directory>[];
+
+    await for (final entity in dir.list(recursive: true)) {
+      if (entity is File) {
+        files.add(entity);
+      } else if (entity is Directory) {
+        directories.add(entity);
+      }
+    }
+
+    // 2. 디렉토리명 변환 (깊은 경로부터 처리해야 안전함)
+    directories.sort((a, b) => b.path.length.compareTo(a.path.length));
+    for (final directory in directories) {
+      if (FileUtils.excludedDirs.contains(path.basename(directory.path))) {
+        continue;
+      }
+      final originalDirName = path.basename(directory.path);
+      final newDirName = FileUtils.convertDirectoryName(
+        originalDirName,
+        config.projectNames,
+      );
+      if (newDirName != originalDirName) {
+        final newPath = Directory(
+          path.join(path.dirname(directory.path), newDirName),
         );
-
-        if (newDirName != originalDirName) {
-          final newPath = Directory(
-            path.join(
-              path.dirname(entity.path),
-              newDirName,
-            ),
-          );
-          await entity.rename(newPath.path);
+        try {
+          await directory.rename(newPath.path);
           renamedFiles++;
-          final subStats = await _processFiles(newPath, config, patterns);
-          convertedFiles += subStats['converted']!;
-          renamedFiles += subStats['renamed']!;
-        } else {
-          final subStats = await _processFiles(entity, config, patterns);
-          convertedFiles += subStats['converted']!;
-          renamedFiles += subStats['renamed']!;
+        } catch (_) {
+          // 디렉토리가 이미 처리됨 (상위 디렉토리 리네임으로 인해)
         }
-      } else if (entity is File) {
-        // 파일명 변환
-        final originalFileName = path.basename(entity.path);
+      }
+    }
 
-        // Flutter LLDB 관련 파일 및 ephemeral 파일 제외
-        // iOS/macOS ephemeral 디렉토리의 임시 파일들 제외
-        if ((entity.path.contains('ios/Flutter/ephemeral') ||
-                entity.path.contains('macos/Flutter/ephemeral')) &&
-            (originalFileName == 'flutter_lldb_helper.py' ||
-                originalFileName == 'flutter_lldbinit' ||
-                originalFileName.endsWith('.xcfilelist'))) {
-          continue;
-        }
+    // 3. 파일 배치 병렬 처리 + 진행률 출력
+    final totalFiles = files.length;
+    var processedFiles = 0;
+    var lastLoggedProgress = -1;
 
-        final newFileName = FileUtils.convertFileName(
-          originalFileName,
-          config.projectNames,
+    const batchSize = 50;
+    for (var i = 0; i < files.length; i += batchSize) {
+      final end = (i + batchSize < files.length) ? i + batchSize : files.length;
+      final batch = files.sublist(i, end);
+
+      final results = await Future.wait(
+        batch.map((file) => _processSingleFile(file, config, patterns)),
+        eagerError: false,
+      );
+
+      convertedFiles +=
+          results.where((r) => r['converted'] ?? false).length;
+      renamedFiles += results.where((r) => r['renamed'] ?? false).length;
+      processedFiles += batch.length;
+
+      // 10% 단위 진행률 출력
+      final progress = (processedFiles / totalFiles * 100).toInt();
+      final progressTen = (progress ~/ 10) * 10;
+      if (progressTen > lastLoggedProgress && progressTen > 0) {
+        logger.info(
+          '   📊 Progress: $processedFiles/$totalFiles ($progress%)',
         );
-
-        if (newFileName != originalFileName) {
-          final newPath = File(
-            path.join(
-              path.dirname(entity.path),
-              newFileName,
-            ),
-          );
-          await entity.rename(newPath.path);
-          renamedFiles++;
-        }
-
-        // 파일 내용 변환
-        if (FileUtils.shouldProcessFile(entity)) {
-          if (!await FileUtils.isTextFile(entity) ||
-              !FileUtils.isFileSizeValid(entity)) {
-            continue;
-          }
-
-          try {
-            final content = await entity.readAsString();
-            final convertedContent = TemplateConverter.convertContent(
-              content,
-              patterns,
-            );
-
-            if (convertedContent != content) {
-              await entity.writeAsString(convertedContent);
-              convertedFiles++;
-            }
-          } catch (e) {
-            logger.warn('   ⚠️  Error processing ${entity.path}: $e');
-          }
-        }
+        lastLoggedProgress = progressTen;
       }
     }
 
     return {'converted': convertedFiles, 'renamed': renamedFiles};
   }
 
+  /// 단일 파일 처리 (병렬 처리용)
+  Future<Map<String, bool>> _processSingleFile(
+    File entity,
+    ProjectConfig config,
+    List<ReplacementPattern> patterns,
+  ) async {
+    var converted = false;
+    var renamed = false;
+
+    try {
+      final originalFileName = path.basename(entity.path);
+
+      // Flutter LLDB 관련 파일 및 ephemeral 파일 제외
+      if ((entity.path.contains('ios/Flutter/ephemeral') ||
+              entity.path.contains('macos/Flutter/ephemeral')) &&
+          (originalFileName == 'flutter_lldb_helper.py' ||
+              originalFileName == 'flutter_lldbinit' ||
+              originalFileName.endsWith('.xcfilelist'))) {
+        return {'converted': false, 'renamed': false};
+      }
+
+      // 파일명 변환
+      final newFileName = FileUtils.convertFileName(
+        originalFileName,
+        config.projectNames,
+      );
+
+      File fileToProcess = entity;
+
+      if (newFileName != originalFileName) {
+        final newPath = File(
+          path.join(path.dirname(entity.path), newFileName),
+        );
+        try {
+          await entity.rename(newPath.path);
+          renamed = true;
+          fileToProcess = newPath;
+        } catch (_) {
+          // 파일이 이미 처리됨 (디렉토리 리네임으로 인해)
+          // 새 경로에서 파일을 찾아봄
+          if (newPath.existsSync()) {
+            fileToProcess = newPath;
+          }
+        }
+      }
+
+      // 파일 내용 변환
+      if (FileUtils.shouldProcessFile(fileToProcess)) {
+        if (!await FileUtils.isTextFile(fileToProcess) ||
+            !FileUtils.isFileSizeValid(fileToProcess)) {
+          return {'converted': converted, 'renamed': renamed};
+        }
+
+        final content = await fileToProcess.readAsString();
+        final convertedContent = TemplateConverter.convertContent(
+          content,
+          patterns,
+        );
+
+        if (convertedContent != content) {
+          await fileToProcess.writeAsString(convertedContent);
+          converted = true;
+        }
+      }
+    } catch (_) {
+      // 에러 무시 (병렬 처리 안정성 - 디렉토리 리네임으로 인한 경로 변경 등)
+    }
+
+    return {'converted': converted, 'renamed': renamed};
+  }
+
   /// App 동기화 실행
-  Future<void> sync(ProjectConfig config, Directory? projectDir) async {
+  Future<void> sync(
+    ProjectConfig config,
+    Directory? projectDir, {
+    bool syncIcons = false,
+  }) async {
     final rootDir = projectDir ?? Directory.current;
 
     // --project-dir이 지정된 경우 해당 경로의 app 디렉토리 직접 확인
@@ -375,6 +439,7 @@ class SyncAppService {
         targetBrick,
         syncConfig.name,
         config,
+        syncIcons: syncIcons,
       );
       syncedCount++;
     }

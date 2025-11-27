@@ -15,9 +15,9 @@ import 'package:path/path.dart' as path;
 class SyncCommand extends Command<int> {
   /// {@macro sync_command}
   SyncCommand({required Logger logger})
-      : _logger = logger,
-        _syncAppService = SyncAppService(logger),
-        _syncMonorepoService = SyncMonorepoService(logger) {
+    : _logger = logger,
+      _syncAppService = SyncAppService(logger),
+      _syncMonorepoService = SyncMonorepoService(logger) {
     argParser
       ..addOption(
         'type',
@@ -30,6 +30,12 @@ class SyncCommand extends Command<int> {
         'project-dir',
         abbr: 'd',
         help: 'Project directory (defaults to current directory)',
+      )
+      ..addFlag(
+        'sync-icons',
+        help:
+            'Sync app icons from template (default: preserve existing brick icons)',
+        negatable: false,
       );
   }
 
@@ -49,6 +55,7 @@ class SyncCommand extends Command<int> {
     try {
       final type = argResults?['type'] as String?;
       final projectDirPath = argResults?['project-dir'] as String?;
+      final syncIcons = argResults?['sync-icons'] as bool? ?? false;
 
       if (type == null) {
         _logger.err('Type is required. Use --type app or --type monorepo');
@@ -86,7 +93,7 @@ class SyncCommand extends Command<int> {
       // 타입에 따라 동기화 실행
       switch (type) {
         case 'app':
-          await _syncAppService.sync(config, projectDir);
+          await _syncAppService.sync(config, projectDir, syncIcons: syncIcons);
         case 'monorepo':
           await _syncMonorepoService.sync(config, projectDir);
         default:
@@ -115,4 +122,3 @@ class SyncCommand extends Command<int> {
     }
   }
 }
-
