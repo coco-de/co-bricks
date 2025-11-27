@@ -1777,8 +1777,27 @@ class TemplateConverter {
           .split('_')
           .map((word) => word[0].toUpperCase() + word.substring(1))
           .join(' ');
+      // camelCase: cocode → cocode (첫 글자 소문자)
+      final orgCamel = orgLower;
+      // PascalCase: cocode → Cocode (첫 글자 대문자)
+      final orgPascal = orgLower[0].toUpperCase() + orgLower.substring(1);
 
       patterns.addAll([
+        // 비밀번호 패턴: cocode1477! → {{org_name.lowerCase()}}1477!
+        ReplacementPattern(
+          RegExp('${_escapeRegex(orgLower)}1477!'),
+          '{{org_name.lowerCase()}}1477!',
+        ),
+        // 변수명 패턴 (camelCase): cocodeUserInfos → scopedUserInfos
+        // 이 패턴은 특정 변수명을 일반화된 이름으로 변환
+        ReplacementPattern(
+          RegExp('${_escapeRegex(orgCamel)}UserInfos'),
+          'scopedUserInfos',
+        ),
+        ReplacementPattern(
+          RegExp('${_escapeRegex(orgCamel)}UserInfo'),
+          'scopedUserInfo',
+        ),
         // 하이픈(-) 패턴: lowerCase 사용
         ReplacementPattern(
           RegExp('-${_escapeRegex(orgLower)}-'),
@@ -1804,6 +1823,11 @@ class TemplateConverter {
         ReplacementPattern(
           RegExp('\\.${_escapeRegex(orgLower)}\\b'),
           '.{{org_name.dotCase()}}',
+        ),
+        // PascalCase 패턴: Cocode → {{org_name.pascalCase()}}
+        ReplacementPattern(
+          RegExp('\\b${_escapeRegex(orgPascal)}\\b'),
+          '{{org_name.pascalCase()}}',
         ),
         // 타이틀 케이스
         ReplacementPattern(
