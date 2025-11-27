@@ -3240,6 +3240,27 @@ class TemplateConverter {
         // dev.blueprint.im → dev.{{project_name.paramCase()}}.{{org_tld}}
         // stg.blueprint.im → stg.{{project_name.paramCase()}}.{{org_tld}}
         for (final prefix in ['dev', 'stg', 'staging', 'prod', 'production']) {
+          // webcredentials:dev.blueprint.im, applinks:dev.blueprint.im 패턴
+          // (prefix가 있는 entitlements 도메인)
+          patterns.add(
+            ReplacementPattern(
+              RegExp(
+                '(webcredentials|applinks):$prefix\\.'
+                '${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}',
+              ),
+              '\$1:$prefix.{{project_name.paramCase()}}.{{org_tld}}',
+            ),
+          );
+          patterns.add(
+            ReplacementPattern(
+              RegExp(
+                '(webcredentials|applinks):$prefix\\.'
+                '${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}',
+              ),
+              '\$1:$prefix.{{project_name.paramCase()}}.{{org_tld}}',
+            ),
+          );
+          // 일반 도메인 패턴 (prefix 포함)
           patterns.add(
             ReplacementPattern(
               RegExp(
