@@ -461,6 +461,7 @@ class FileUtils {
     '.txt',
     '.xcconfig',
     '.xcscheme',
+    '.entitlements', // iOS entitlements (XML 형식)
   ];
 
   /// 특수 파일명 목록
