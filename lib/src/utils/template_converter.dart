@@ -3237,8 +3237,8 @@ class TemplateConverter {
 
       for (final orgTld in orgTlds) {
         // iOS entitlements 도메인 패턴 (webcredentials, applinks)
-        // dev.blueprint.im → dev.{{project_name.paramCase()}}.{{org_tld}}
-        // stg.blueprint.im → stg.{{project_name.paramCase()}}.{{org_tld}}
+        // dev.blueprint.im → dev.{{project_name.paramCase()}}.{{tld}}
+        // stg.blueprint.im → stg.{{project_name.paramCase()}}.{{tld}}
         for (final prefix in ['dev', 'stg', 'staging', 'prod', 'production']) {
           // webcredentials:dev.blueprint.im, applinks:dev.blueprint.im 패턴
           // (prefix가 있는 entitlements 도메인)
@@ -3248,7 +3248,7 @@ class TemplateConverter {
                 '(webcredentials|applinks):$prefix\\.'
                 '${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}',
               ),
-              '\$1:$prefix.{{project_name.paramCase()}}.{{org_tld}}',
+              '\$1:$prefix.{{project_name.paramCase()}}.{{tld}}',
             ),
           );
           patterns.add(
@@ -3257,16 +3257,16 @@ class TemplateConverter {
                 '(webcredentials|applinks):$prefix\\.'
                 '${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}',
               ),
-              '\$1:$prefix.{{project_name.paramCase()}}.{{org_tld}}',
+              '\$1:$prefix.{{project_name.paramCase()}}.{{tld}}',
             ),
           );
-          // 일반 도메인 패턴 (prefix 포함)
+          // 일반 도메인 패턴 (prefix 포함) - entitlements용
           patterns.add(
             ReplacementPattern(
               RegExp(
                 '$prefix\\.${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}\\b',
               ),
-              '$prefix.{{project_name.paramCase()}}.{{org_tld}}',
+              '$prefix.{{project_name.paramCase()}}.{{tld}}',
             ),
           );
           patterns.add(
@@ -3274,7 +3274,7 @@ class TemplateConverter {
               RegExp(
                 '$prefix\\.${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}\\b',
               ),
-              '$prefix.{{project_name.paramCase()}}.{{org_tld}}',
+              '$prefix.{{project_name.paramCase()}}.{{tld}}',
             ),
           );
         }
@@ -3284,52 +3284,52 @@ class TemplateConverter {
             RegExp(
               'app-staging\\.${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}\\b',
             ),
-            'app-staging.{{project_name.paramCase()}}.{{org_tld}}',
+            'app-staging.{{project_name.paramCase()}}.{{tld}}',
           ),
           ReplacementPattern(
             RegExp(
               'app-staging\\.${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}\\b',
             ),
-            'app-staging.{{project_name.paramCase()}}.{{org_tld}}',
+            'app-staging.{{project_name.paramCase()}}.{{tld}}',
           ),
           ReplacementPattern(
             RegExp(
               'app-development\\.${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}\\b',
             ),
-            'app-development.{{project_name.paramCase()}}.{{org_tld}}',
+            'app-development.{{project_name.paramCase()}}.{{tld}}',
           ),
           ReplacementPattern(
             RegExp(
               'app-development\\.${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}\\b',
             ),
-            'app-development.{{project_name.paramCase()}}.{{org_tld}}',
+            'app-development.{{project_name.paramCase()}}.{{tld}}',
           ),
-          // 기본 도메인 패턴 (blueprint.im)
+          // 기본 도메인 패턴 (blueprint.im) - entitlements용
           ReplacementPattern(
             RegExp(
               '\\b${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}\\b',
             ),
-            '{{project_name.paramCase()}}.{{org_tld}}',
+            '{{project_name.paramCase()}}.{{tld}}',
           ),
           ReplacementPattern(
             RegExp(
               '\\b${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}\\b',
             ),
-            '{{project_name.paramCase()}}.{{org_tld}}',
+            '{{project_name.paramCase()}}.{{tld}}',
           ),
           // iOS entitlements 도메인 패턴 (webcredentials:, applinks: 뒤에 오는 도메인)
-          // webcredentials:blueprint.im → webcredentials:{{project_name.paramCase()}}.{{org_tld}}
+          // webcredentials:blueprint.im → webcredentials:{{project_name.paramCase()}}.{{tld}}
           ReplacementPattern(
             RegExp(
               '(webcredentials|applinks):${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}',
             ),
-            r'$1:{{project_name.paramCase()}}.{{org_tld}}',
+            r'$1:{{project_name.paramCase()}}.{{tld}}',
           ),
           ReplacementPattern(
             RegExp(
               '(webcredentials|applinks):${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}',
             ),
-            r'$1:{{project_name.paramCase()}}.{{org_tld}}',
+            r'$1:{{project_name.paramCase()}}.{{tld}}',
           ),
         ]);
       }
