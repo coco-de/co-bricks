@@ -2717,6 +2717,49 @@ class TemplateConverter {
               ),
             ]);
 
+            // macOS/iOS .app 파일명 패턴 (PBXFileReference)
+            // project_name과 org_name이 동일할 때 .app 파일명은 project_name.titleCase()로 변환
+            // Cocode.app → {{project_name.titleCase()}}.app
+            // path = "Cocode.app" → path = "{{project_name.titleCase()}}.app"
+            final projectWords = projectName.split('_');
+            // PascalCase: HelloWorld (각 단어 첫 글자 대문자, 연속)
+            final projectPascal = projectWords
+                .map(
+                  (word) => word.isEmpty
+                      ? ''
+                      : '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}',
+                )
+                .join();
+            // titleCase: Hello World (각 단어 첫 글자 대문자, 공백 구분)
+            final projectTitle = projectWords
+                .map(
+                  (word) => word.isEmpty
+                      ? ''
+                      : '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}',
+                )
+                .join(' ');
+
+            patterns.addAll([
+              // PBXFileReference 형식: /* Cocode.app */ 또는 path = "Cocode.app"
+              ReplacementPattern(
+                RegExp('/\\* ${_escapeRegex(projectPascal)}\\.app \\*/'),
+                '/* {{project_name.titleCase()}}.app */',
+              ),
+              ReplacementPattern(
+                RegExp('path = "${_escapeRegex(projectPascal)}\\.app"'),
+                'path = "{{project_name.titleCase()}}.app"',
+              ),
+              // titleCase 형태도 처리 (Good Teacher.app 형태)
+              ReplacementPattern(
+                RegExp('/\\* ${_escapeRegex(projectTitle)}\\.app \\*/'),
+                '/* {{project_name.titleCase()}}.app */',
+              ),
+              ReplacementPattern(
+                RegExp('path = "${_escapeRegex(projectTitle)}\\.app"'),
+                'path = "{{project_name.titleCase()}}.app"',
+              ),
+            ]);
+
             // macOS Bundle ID 패턴 (더 구체적이므로 먼저!)
             // im.cocode.mac.blueprint.wl7r.dev → {{org_tld}}.{{org_name.dotCase()}}.mac.{{project_name.dotCase()}}.{{randomprojectid}}.dev
             patterns.addAll([
