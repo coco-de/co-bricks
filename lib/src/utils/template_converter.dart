@@ -2760,7 +2760,35 @@ class TemplateConverter {
               ),
             ]);
 
-            // macOS Bundle ID 패턴 (더 구체적이므로 먼저!)
+            // macOS Bundle ID 패턴 with suffix (console, widgetbook) - 가장 구체적이므로 먼저!
+            // im.cocode.mac.cocode.console.jlc9.dev → {{org_tld}}.{{org_name.dotCase()}}.mac.{{project_name.dotCase()}}.console.{{randomprojectid}}.dev
+            for (final suffix in ['console', 'widgetbook']) {
+              patterns.addAll([
+                // .dev suffix
+                ReplacementPattern(
+                  RegExp(
+                    '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.mac\\.${_escapeRegex(projectDot)}\\.$suffix\\.${_escapeRegex(randomId)}\\.dev\\b',
+                  ),
+                  '{{org_tld}}.{{org_name.dotCase()}}.mac.{{project_name.dotCase()}}.$suffix.{{randomprojectid}}.dev',
+                ),
+                // .stg suffix
+                ReplacementPattern(
+                  RegExp(
+                    '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.mac\\.${_escapeRegex(projectDot)}\\.$suffix\\.${_escapeRegex(randomId)}\\.stg\\b',
+                  ),
+                  '{{org_tld}}.{{org_name.dotCase()}}.mac.{{project_name.dotCase()}}.$suffix.{{randomprojectid}}.stg',
+                ),
+                // 기본 (환경 suffix 없음)
+                ReplacementPattern(
+                  RegExp(
+                    '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.mac\\.${_escapeRegex(projectDot)}\\.$suffix\\.${_escapeRegex(randomId)}\\b',
+                  ),
+                  '{{org_tld}}.{{org_name.dotCase()}}.mac.{{project_name.dotCase()}}.$suffix.{{randomprojectid}}',
+                ),
+              ]);
+            }
+
+            // macOS Bundle ID 패턴 (기본 앱용)
             // im.cocode.mac.blueprint.wl7r.dev → {{org_tld}}.{{org_name.dotCase()}}.mac.{{project_name.dotCase()}}.{{randomprojectid}}.dev
             patterns.addAll([
               ReplacementPattern(
