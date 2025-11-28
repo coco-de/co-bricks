@@ -248,8 +248,7 @@ class SyncAppService {
         eagerError: false,
       );
 
-      convertedFiles +=
-          results.where((r) => r['converted'] ?? false).length;
+      convertedFiles += results.where((r) => r['converted'] ?? false).length;
       renamedFiles += results.where((r) => r['renamed'] ?? false).length;
       processedFiles += batch.length;
 

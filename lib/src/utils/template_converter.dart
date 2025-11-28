@@ -2705,6 +2705,29 @@ class TemplateConverter {
               ),
             ]);
 
+            // macOS Bundle ID 패턴 (더 구체적이므로 먼저!)
+            // im.cocode.mac.blueprint.wl7r.dev → {{org_tld}}.{{org_name.dotCase()}}.mac.{{project_name.dotCase()}}.{{randomprojectid}}.dev
+            patterns.addAll([
+              ReplacementPattern(
+                RegExp(
+                  '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.mac\\.${_escapeRegex(projectDot)}\\.${_escapeRegex(randomId)}\\.dev\\b',
+                ),
+                '{{org_tld}}.{{org_name.dotCase()}}.mac.{{project_name.dotCase()}}.{{randomprojectid}}.dev',
+              ),
+              ReplacementPattern(
+                RegExp(
+                  '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.mac\\.${_escapeRegex(projectDot)}\\.${_escapeRegex(randomId)}\\.stg\\b',
+                ),
+                '{{org_tld}}.{{org_name.dotCase()}}.mac.{{project_name.dotCase()}}.{{randomprojectid}}.stg',
+              ),
+              ReplacementPattern(
+                RegExp(
+                  '\\b${_escapeRegex(orgTld)}\\.${_escapeRegex(orgLower)}\\.mac\\.${_escapeRegex(projectDot)}\\.${_escapeRegex(randomId)}\\b',
+                ),
+                '{{org_tld}}.{{org_name.dotCase()}}.mac.{{project_name.dotCase()}}.{{randomprojectid}}',
+              ),
+            ]);
+
             // 순수 점(.) 패턴 (모두 dotCase) - 가장 먼저! 더 구체적
             patterns.addAll([
               ReplacementPattern(
