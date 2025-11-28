@@ -2705,6 +2705,18 @@ class TemplateConverter {
               ),
             ]);
 
+            // Makefile sed 패턴 (백슬래시 이스케이프 포함)
+            // \(im\.cocode\.\)\(cocode\) → \({{org_tld}}\.{{org_name.dotCase()}}\.\)\({{project_name.dotCase()}}\)
+            patterns.addAll([
+              // sed 패턴: \(im\.cocode\.\)\(cocode\)\.\(.*\) 형태
+              ReplacementPattern(
+                RegExp(
+                  '\\\\\\(${_escapeRegex(orgTld)}\\\\\\.${_escapeRegex(orgLower)}\\\\\\.\\\\\\)\\\\\\(${_escapeRegex(projectDot)}\\\\\\)',
+                ),
+                r'\({{org_tld}}\.{{org_name.dotCase()}}\.\)\({{project_name.dotCase()}}\)',
+              ),
+            ]);
+
             // macOS Bundle ID 패턴 (더 구체적이므로 먼저!)
             // im.cocode.mac.blueprint.wl7r.dev → {{org_tld}}.{{org_name.dotCase()}}.mac.{{project_name.dotCase()}}.{{randomprojectid}}.dev
             patterns.addAll([
