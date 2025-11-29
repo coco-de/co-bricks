@@ -2420,6 +2420,97 @@ class TemplateConverter {
   ) {
     final patterns = <ReplacementPattern>[];
 
+    // Fastlane 패턴 (가장 먼저 적용! - org_name을 사용해야 하는 패턴들)
+    // project_name과 org_name이 같은 경우를 위해 먼저 처리
+    for (final orgName in orgNames) {
+      final orgLower = orgName.toLowerCase();
+      final orgParam = orgName.replaceAll('_', '-').toLowerCase();
+      final orgPascal =
+          orgLower[0].toUpperCase() + orgLower.substring(1);
+      final orgTitle = orgName
+          .split('_')
+          .map(
+            (word) => word.isEmpty
+                ? ''
+                : '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}',
+          )
+          .join(' ');
+
+      // Matchfile git_branch 패턴 (최우선!)
+      // git_branch("laputa") → git_branch("{{org_name.paramCase()}}")
+      patterns.add(
+        ReplacementPattern(
+          RegExp('git_branch\\("${_escapeRegex(orgLower)}"\\)'),
+          'git_branch("{{org_name.paramCase()}}")',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('git_branch\\("${_escapeRegex(orgParam)}"\\)'),
+          'git_branch("{{org_name.paramCase()}}")',
+        ),
+      );
+
+      // Fastfile $organization_name 패턴 (Ruby 변수 할당)
+      // $organization_name = "laputa" → $organization_name = "{{org_name.paramCase()}}"
+      patterns.add(
+        ReplacementPattern(
+          RegExp(r'\$organization_name\s*=\s*"' '${_escapeRegex(orgLower)}"'),
+          r'$organization_name = "{{org_name.paramCase()}}"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(r'\$organization_name\s*=\s*"' '${_escapeRegex(orgParam)}"'),
+          r'$organization_name = "{{org_name.paramCase()}}"',
+        ),
+      );
+
+      // Windows Runner.rc LegalCopyright 패턴
+      // VALUE "LegalCopyright", "Copyright (C) 2024 Cocode. All rights reserved."
+      // → VALUE "LegalCopyright", "Copyright (C) {{current_year}} {{org_name.titleCase()}}. All rights reserved."
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'VALUE "LegalCopyright",\\s*"Copyright \\(C\\) \\d{4} '
+            '${_escapeRegex(orgPascal)}\\. All rights reserved\\."',
+          ),
+          'VALUE "LegalCopyright", "Copyright (C) {{current_year}} '
+          '{{org_name.titleCase()}}. All rights reserved."',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'VALUE "LegalCopyright",\\s*"Copyright \\(C\\) \\d{4} '
+            '${_escapeRegex(orgTitle)}\\. All rights reserved\\."',
+          ),
+          'VALUE "LegalCopyright", "Copyright (C) {{current_year}} '
+          '{{org_name.titleCase()}}. All rights reserved."',
+        ),
+      );
+
+      // Android keystore README.md -dname O= 패턴
+      // -dname "CN=..., OU=..., O=Cocode Inc., L=..., ST=..., C=..."
+      // → O={{org_name.titleCase()}} Inc.
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'O=${_escapeRegex(orgPascal)} Inc\\.',
+          ),
+          'O={{org_name.titleCase()}} Inc.',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'O=${_escapeRegex(orgTitle)} Inc\\.',
+          ),
+          'O={{org_name.titleCase()}} Inc.',
+        ),
+      );
+    }
+
     for (final orgTld in orgTlds) {
       for (final orgName in orgNames) {
         final orgLower = orgName.toLowerCase();
@@ -2457,7 +2548,7 @@ class TemplateConverter {
 
               // iOS/Android Bundle ID with suffix 패턴
               // im.cocode.blueprint.console.k9rm
-              // → {{org_tld}}.{{org_name.lowerCase()}}.{{project_name.dotCase()}}.suffix.{{randomprojectid}}
+              // → {{org_tld}}.{{org_name.dotCase()}}.{{project_name.dotCase()}}.suffix.{{randomprojectid}}
               patterns.addAll([
                 // .dev suffix
                 ReplacementPattern(
@@ -2468,7 +2559,7 @@ class TemplateConverter {
                     '$suffix\\.'
                     '${_escapeRegex(randomId)}\\.dev\\b',
                   ),
-                  '{{org_tld}}.{{org_name.lowerCase()}}.'
+                  '{{org_tld}}.{{org_name.dotCase()}}.'
                   '{{project_name.dotCase()}}.$suffix.{{randomprojectid}}.dev',
                 ),
                 // .stg suffix
@@ -2480,7 +2571,7 @@ class TemplateConverter {
                     '$suffix\\.'
                     '${_escapeRegex(randomId)}\\.stg\\b',
                   ),
-                  '{{org_tld}}.{{org_name.lowerCase()}}.'
+                  '{{org_tld}}.{{org_name.dotCase()}}.'
                   '{{project_name.dotCase()}}.$suffix.{{randomprojectid}}.stg',
                 ),
                 // 기본 (suffix 없음)
@@ -2492,7 +2583,7 @@ class TemplateConverter {
                     '$suffix\\.'
                     '${_escapeRegex(randomId)}\\b',
                   ),
-                  '{{org_tld}}.{{org_name.lowerCase()}}.'
+                  '{{org_tld}}.{{org_name.dotCase()}}.'
                   '{{project_name.dotCase()}}.$suffix.{{randomprojectid}}',
                 ),
               ]);
@@ -2544,7 +2635,7 @@ class TemplateConverter {
                     '$suffix\\.'
                     '${_escapeRegex(randomId)}\\.dev"',
                   ),
-                  '"package_name": "{{org_tld}}.{{org_name.lowerCase()}}.'
+                  '"package_name": "{{org_tld}}.{{org_name.dotCase()}}.'
                   '{{project_name.dotCase()}}.$suffix.{{randomprojectid}}.dev"',
                 ),
                 ReplacementPattern(
@@ -2556,7 +2647,7 @@ class TemplateConverter {
                     '$suffix\\.'
                     '${_escapeRegex(randomId)}\\.stg"',
                   ),
-                  '"package_name": "{{org_tld}}.{{org_name.lowerCase()}}.'
+                  '"package_name": "{{org_tld}}.{{org_name.dotCase()}}.'
                   '{{project_name.dotCase()}}.$suffix.{{randomprojectid}}.stg"',
                 ),
                 ReplacementPattern(
@@ -2568,7 +2659,7 @@ class TemplateConverter {
                     '$suffix\\.'
                     '${_escapeRegex(randomId)}"',
                   ),
-                  '"package_name": "{{org_tld}}.{{org_name.lowerCase()}}.'
+                  '"package_name": "{{org_tld}}.{{org_name.dotCase()}}.'
                   '{{project_name.dotCase()}}.$suffix.{{randomprojectid}}"',
                 ),
               ]);
@@ -2585,7 +2676,7 @@ class TemplateConverter {
                     '$suffix\\.'
                     '${_escapeRegex(randomId)}"\\)',
                   ),
-                  'package_name("{{org_tld}}.{{org_name.lowerCase()}}.'
+                  'package_name("{{org_tld}}.{{org_name.dotCase()}}.'
                   '{{project_name.dotCase()}}.$suffix.{{randomprojectid}}")',
                 ),
               );
@@ -2619,7 +2710,7 @@ class TemplateConverter {
                     '$suffix\\.'
                     "${_escapeRegex(randomId)}\\.dev'",
                   ),
-                  "iosBundleId: '{{org_tld}}.{{org_name.lowerCase()}}."
+                  "iosBundleId: '{{org_tld}}.{{org_name.dotCase()}}."
                   "{{project_name.dotCase()}}.$suffix.{{randomprojectid}}.dev'",
                 ),
                 ReplacementPattern(
@@ -2631,7 +2722,7 @@ class TemplateConverter {
                     '$suffix\\.'
                     "${_escapeRegex(randomId)}\\.stg'",
                   ),
-                  "iosBundleId: '{{org_tld}}.{{org_name.lowerCase()}}."
+                  "iosBundleId: '{{org_tld}}.{{org_name.dotCase()}}."
                   "{{project_name.dotCase()}}.$suffix.{{randomprojectid}}.stg'",
                 ),
                 ReplacementPattern(
@@ -2643,7 +2734,7 @@ class TemplateConverter {
                     '$suffix\\.'
                     "${_escapeRegex(randomId)}'",
                   ),
-                  "iosBundleId: '{{org_tld}}.{{org_name.lowerCase()}}."
+                  "iosBundleId: '{{org_tld}}.{{org_name.dotCase()}}."
                   "{{project_name.dotCase()}}.$suffix.{{randomprojectid}}'",
                 ),
               ]);
@@ -2660,7 +2751,7 @@ class TemplateConverter {
                     '$suffix\\.'
                     "${_escapeRegex(randomId)}'",
                   ),
-                  "iosBundleId: '{{org_tld}}.{{org_name.lowerCase()}}.mac."
+                  "iosBundleId: '{{org_tld}}.{{org_name.dotCase()}}.mac."
                   "{{project_name.dotCase()}}.$suffix.{{randomprojectid}}'",
                 ),
               ]);
@@ -2677,7 +2768,7 @@ class TemplateConverter {
                     '$suffix\\.'
                     '${_escapeRegex(randomId)}"',
                   ),
-                  '"bundle_id": "{{org_tld}}.{{org_name.lowerCase()}}.'
+                  '"bundle_id": "{{org_tld}}.{{org_name.dotCase()}}.'
                   '{{project_name.dotCase()}}.$suffix.{{randomprojectid}}"',
                 ),
               );
