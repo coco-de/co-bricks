@@ -1627,6 +1627,7 @@ $closingBrace
     String? mixinPrefix;
     String? databaseField;
     String? databaseType;
+    String? serverpodServiceField; // ServerpodService 필드명 (예: _serverpodService)
     final daoGetters =
         <
           Map<String, String>
@@ -1660,6 +1661,18 @@ $closingBrace
         if (match != null) {
           databaseType = match.group(1);
           databaseField = match.group(2);
+        }
+      }
+
+      // ServerpodService 필드 (예: final ServerpodService _serverpodService;)
+      if (line.contains('final') &&
+          line.contains('ServerpodService') &&
+          !line.contains('Database')) {
+        final match = RegExp(
+          r'final\s+ServerpodService\s+(_\w+);',
+        ).firstMatch(line);
+        if (match != null) {
+          serverpodServiceField = match.group(1);
         }
       }
 
@@ -1712,6 +1725,7 @@ $closingBrace
       databaseField: databaseField,
       databaseType: databaseType,
       daoGetters: daoGetters,
+      serverpodServiceField: serverpodServiceField,
     );
 
     // @LazySingleton부터의 템플릿 추가
@@ -1738,10 +1752,13 @@ $closingBrace
     required List<Map<String, String>> daoGetters,
     String? databaseField,
     String? databaseType,
+    String? serverpodServiceField,
   }) {
     final buffer = StringBuffer();
     final hasDatabase =
         databaseField != null && databaseType != null && daoGetters.isNotEmpty;
+    // ServerpodService 필드가 있으면 해당 필드명 사용, 없으면 기본값 _serverpodService
+    final spField = serverpodServiceField ?? '_serverpodService';
 
     // 문서 주석
     buffer.writeln(docComment.trimRight());
@@ -1792,18 +1809,19 @@ $closingBrace
     buffer.writeln('  /// $mixinPrefix Repository 생성자');
     if (hasDatabase) {
       buffer.writeln('  $className(');
-      buffer.writeln('    this._podService,');
+      buffer.writeln('    this.$spField,');
       buffer.writeln('    this.$databaseField,');
       buffer.writeln('  );');
-      buffer.writeln('  final ServerpodService _podService;');
+      buffer.writeln('  final ServerpodService $spField;');
       buffer.writeln('  final $databaseType $databaseField;');
     } else {
-      buffer.writeln('  $className();');
-      buffer.writeln('  final ServerpodService _podService;');
+      buffer.writeln('  $className(this.$spField);');
+      buffer.writeln('');
+      buffer.writeln('  final ServerpodService $spField;');
     }
     buffer.writeln();
     buffer.writeln('  @override');
-    buffer.writeln('  ServerpodClient get client => _podService.client;');
+    buffer.writeln('  ServerpodClient get client => $spField.client;');
     buffer.writeln();
     for (final dao in daoGetters) {
       buffer.writeln('  @override');
