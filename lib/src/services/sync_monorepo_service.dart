@@ -906,15 +906,17 @@ class SyncMonorepoService {
       innerDir.createSync(recursive: true);
     }
 
-    // console 디렉토리의 내용을 innerDir로 복사 (조건부 파일 구조는 건너뜀)
+    // console 디렉토리의 내용을 innerDir로 복사
+    // 기존 파일들을 덮어쓰지만, 조건부 mixin 파일 구조({{#has_*}})는 건너뜀
     await for (final entity in consoleDir.list()) {
       final entityName = path.basename(entity.path);
       final targetPath = path.join(innerDir.path, entityName);
 
-      // 이미 존재하는 항목은 건너뜀 (조건부 파일 복원에서 온 것)
-      if (await FileSystemEntity.type(targetPath) !=
-          FileSystemEntityType.notFound) {
-        logger.detail('   ⏭️  Skipping existing: $entityName');
+      // 조건부 파일 구조({{#has_*}}로 시작하는 디렉토리)는 건너뜀
+      // 이 구조는 brick에만 존재하고 템플릿에는 없음
+      if (entityName.startsWith('{{#has_') ||
+          entityName.startsWith('{{#enable_')) {
+        logger.detail('   ⏭️  Skipping conditional structure: $entityName');
         continue;
       }
 
@@ -922,6 +924,7 @@ class SyncMonorepoService {
         await FileUtils.copyDirectory(
           entity,
           Directory(targetPath),
+          overwrite: true, // 기존 파일 덮어쓰기
         );
       } else if (entity is File) {
         await entity.copy(targetPath);
