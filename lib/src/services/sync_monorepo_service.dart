@@ -1628,10 +1628,13 @@ $closingBrace
     String? databaseField;
     String? databaseType;
     String? serverpodServiceField; // ServerpodService 필드명 (예: _serverpodService)
+    String? localStorageRepositoryField; // ILocalStorageRepository 필드명
     final daoGetters =
         <
           Map<String, String>
         >[]; // {getterName: 'postDao', daoType: 'PostDao', sourcePath: '_database.postDao'}
+    // 추가 getter들 (serverpodService, localStorageRepository 등)
+    final additionalGetters = <Map<String, String>>[];
 
     // 나머지 파일을 스캔해서 정보 수집
     for (var j = i; j < lines.length; j++) {
@@ -1676,6 +1679,17 @@ $closingBrace
         }
       }
 
+      // ILocalStorageRepository 필드 (예: final ILocalStorageRepository _localStorageRepository;)
+      if (line.contains('final') &&
+          line.contains('ILocalStorageRepository')) {
+        final match = RegExp(
+          r'final\s+ILocalStorageRepository\s+(_\w+);',
+        ).firstMatch(line);
+        if (match != null) {
+          localStorageRepositoryField = match.group(1);
+        }
+      }
+
       // DAO getter (예: PostDao get postDao => _database.postDao;)
       if (line.contains('get') && line.contains('Dao') && line.contains('=>')) {
         final match = RegExp(
@@ -1694,6 +1708,37 @@ $closingBrace
               'sourcePath': sourcePath,
             });
           }
+        }
+      }
+
+      // ServerpodService getter (예: ServerpodService get serverpodService => _serverpodService;)
+      if (line.contains('ServerpodService get serverpodService')) {
+        final match = RegExp(
+          r'ServerpodService\s+get\s+serverpodService\s+=>\s+(_\w+);',
+        ).firstMatch(line);
+        if (match != null) {
+          final sourcePath = match.group(1)!;
+          additionalGetters.add({
+            'type': 'ServerpodService',
+            'getterName': 'serverpodService',
+            'sourcePath': sourcePath,
+          });
+        }
+      }
+
+      // ILocalStorageRepository getter
+      // (예: ILocalStorageRepository get localStorageRepository => _localStorageRepository;)
+      if (line.contains('ILocalStorageRepository get localStorageRepository')) {
+        final match = RegExp(
+          r'ILocalStorageRepository\s+get\s+localStorageRepository\s+=>\s+(_\w+);',
+        ).firstMatch(line);
+        if (match != null) {
+          final sourcePath = match.group(1)!;
+          additionalGetters.add({
+            'type': 'ILocalStorageRepository',
+            'getterName': 'localStorageRepository',
+            'sourcePath': sourcePath,
+          });
         }
       }
     }
@@ -1726,6 +1771,8 @@ $closingBrace
       databaseType: databaseType,
       daoGetters: daoGetters,
       serverpodServiceField: serverpodServiceField,
+      localStorageRepositoryField: localStorageRepositoryField,
+      additionalGetters: additionalGetters,
     );
 
     // @LazySingleton부터의 템플릿 추가
@@ -1753,12 +1800,16 @@ $closingBrace
     String? databaseField,
     String? databaseType,
     String? serverpodServiceField,
+    String? localStorageRepositoryField,
+    List<Map<String, String>>? additionalGetters,
   }) {
     final buffer = StringBuffer();
     final hasDatabase =
         databaseField != null && databaseType != null && daoGetters.isNotEmpty;
     // ServerpodService 필드가 있으면 해당 필드명 사용, 없으면 기본값 _serverpodService
     final spField = serverpodServiceField ?? '_serverpodService';
+    final lsField = localStorageRepositoryField ?? '_localStorageRepository';
+    final hasLocalStorage = localStorageRepositoryField != null;
 
     // 문서 주석
     buffer.writeln(docComment.trimRight());
@@ -1807,13 +1858,24 @@ $closingBrace
     // Serverpod 블록
     buffer.writeln('  {{#has_serverpod}}');
     buffer.writeln('  /// $mixinPrefix Repository 생성자');
-    if (hasDatabase) {
+    if (hasDatabase || hasLocalStorage) {
       buffer.writeln('  $className(');
       buffer.writeln('    this.$spField,');
-      buffer.writeln('    this.$databaseField,');
+      if (hasDatabase) {
+        buffer.writeln('    this.$databaseField,');
+      }
+      if (hasLocalStorage) {
+        buffer.writeln('    this.$lsField,');
+      }
       buffer.writeln('  );');
+      buffer.writeln('');
       buffer.writeln('  final ServerpodService $spField;');
-      buffer.writeln('  final $databaseType $databaseField;');
+      if (hasDatabase) {
+        buffer.writeln('  final $databaseType $databaseField;');
+      }
+      if (hasLocalStorage) {
+        buffer.writeln('  final ILocalStorageRepository $lsField;');
+      }
     } else {
       buffer.writeln('  $className(this.$spField);');
       buffer.writeln('');
@@ -1823,6 +1885,10 @@ $closingBrace
     buffer.writeln('  @override');
     buffer.writeln('  ServerpodClient get client => $spField.client;');
     buffer.writeln();
+    // ServerpodService getter 추가
+    buffer.writeln('  @override');
+    buffer.writeln('  ServerpodService get serverpodService => $spField;');
+    buffer.writeln();
     for (final dao in daoGetters) {
       buffer.writeln('  @override');
       buffer.writeln(
@@ -1830,18 +1896,34 @@ $closingBrace
       );
       buffer.writeln();
     }
+    // LocalStorageRepository getter 추가
+    if (hasLocalStorage) {
+      buffer.writeln('  @override');
+      buffer.writeln('  ILocalStorageRepository get localStorageRepository => $lsField;');
+    }
     buffer.writeln('  {{/has_serverpod}}');
 
     // OpenAPI 블록
     buffer.writeln('  {{#has_openapi}}');
     buffer.writeln('  /// $mixinPrefix Repository 생성자');
-    if (hasDatabase) {
+    if (hasDatabase || hasLocalStorage) {
       buffer.writeln('  $className(');
       buffer.writeln('    this._openApiService,');
-      buffer.writeln('    this.$databaseField,');
+      if (hasDatabase) {
+        buffer.writeln('    this.$databaseField,');
+      }
+      if (hasLocalStorage) {
+        buffer.writeln('    this.$lsField,');
+      }
       buffer.writeln('  );');
+      buffer.writeln('');
       buffer.writeln('  final OpenApiService _openApiService;');
-      buffer.writeln('  final $databaseType $databaseField;');
+      if (hasDatabase) {
+        buffer.writeln('  final $databaseType $databaseField;');
+      }
+      if (hasLocalStorage) {
+        buffer.writeln('  final ILocalStorageRepository $lsField;');
+      }
     } else {
       buffer.writeln('  $className(');
       buffer.writeln('    this._openApiService,');
@@ -1859,18 +1941,34 @@ $closingBrace
       );
       buffer.writeln();
     }
+    // LocalStorageRepository getter 추가
+    if (hasLocalStorage) {
+      buffer.writeln('  @override');
+      buffer.writeln('  ILocalStorageRepository get localStorageRepository => $lsField;');
+    }
     buffer.writeln('  {{/has_openapi}}');
 
     // GraphQL 블록
     buffer.writeln('  {{#has_graphql}}');
     buffer.writeln('  /// $mixinPrefix Repository 생성자');
-    if (hasDatabase) {
+    if (hasDatabase || hasLocalStorage) {
       buffer.writeln('  $className(');
       buffer.writeln('    this._graphQLClient,');
-      buffer.writeln('    this.$databaseField,');
+      if (hasDatabase) {
+        buffer.writeln('    this.$databaseField,');
+      }
+      if (hasLocalStorage) {
+        buffer.writeln('    this.$lsField,');
+      }
       buffer.writeln('  );');
+      buffer.writeln('');
       buffer.writeln('  final GraphQLClient _graphQLClient;');
-      buffer.writeln('  final $databaseType $databaseField;');
+      if (hasDatabase) {
+        buffer.writeln('  final $databaseType $databaseField;');
+      }
+      if (hasLocalStorage) {
+        buffer.writeln('  final ILocalStorageRepository $lsField;');
+      }
     } else {
       buffer.writeln('  $className(this._graphQLClient);');
       buffer.writeln('  final GraphQLClient _graphQLClient;');
@@ -1885,18 +1983,35 @@ $closingBrace
         '  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};',
       );
     }
+    // LocalStorageRepository getter 추가
+    if (hasLocalStorage) {
+      buffer.writeln();
+      buffer.writeln('  @override');
+      buffer.writeln('  ILocalStorageRepository get localStorageRepository => $lsField;');
+    }
     buffer.writeln('  {{/has_graphql}}');
 
     // Supabase 블록
     buffer.writeln('  {{#has_supabase}}');
     buffer.writeln('  /// $mixinPrefix Repository 생성자');
-    if (hasDatabase) {
+    if (hasDatabase || hasLocalStorage) {
       buffer.writeln('  $className(');
       buffer.writeln('    this._supabaseClient,');
-      buffer.writeln('    this.$databaseField,');
+      if (hasDatabase) {
+        buffer.writeln('    this.$databaseField,');
+      }
+      if (hasLocalStorage) {
+        buffer.writeln('    this.$lsField,');
+      }
       buffer.writeln('  );');
+      buffer.writeln('');
       buffer.writeln('  final SupabaseClient _supabaseClient;');
-      buffer.writeln('  final $databaseType $databaseField;');
+      if (hasDatabase) {
+        buffer.writeln('  final $databaseType $databaseField;');
+      }
+      if (hasLocalStorage) {
+        buffer.writeln('  final ILocalStorageRepository $lsField;');
+      }
     } else {
       buffer.writeln('  $className(this._supabaseClient);');
       buffer.writeln('  final SupabaseClient _supabaseClient;');
@@ -1911,18 +2026,35 @@ $closingBrace
         '  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};',
       );
     }
+    // LocalStorageRepository getter 추가
+    if (hasLocalStorage) {
+      buffer.writeln();
+      buffer.writeln('  @override');
+      buffer.writeln('  ILocalStorageRepository get localStorageRepository => $lsField;');
+    }
     buffer.writeln('  {{/has_supabase}}');
 
     // Firebase 블록
     buffer.writeln('  {{#has_firebase}}');
     buffer.writeln('  /// $mixinPrefix Repository 생성자');
-    if (hasDatabase) {
+    if (hasDatabase || hasLocalStorage) {
       buffer.writeln('  $className(');
       buffer.writeln('    this._firebaseService,');
-      buffer.writeln('    this.$databaseField,');
+      if (hasDatabase) {
+        buffer.writeln('    this.$databaseField,');
+      }
+      if (hasLocalStorage) {
+        buffer.writeln('    this.$lsField,');
+      }
       buffer.writeln('  );');
+      buffer.writeln('');
       buffer.writeln('  final FirebaseService _firebaseService;');
-      buffer.writeln('  final $databaseType $databaseField;');
+      if (hasDatabase) {
+        buffer.writeln('  final $databaseType $databaseField;');
+      }
+      if (hasLocalStorage) {
+        buffer.writeln('  final ILocalStorageRepository $lsField;');
+      }
     } else {
       buffer.writeln('  $className(this._firebaseService);');
       buffer.writeln('  final FirebaseService _firebaseService;');
@@ -1938,6 +2070,12 @@ $closingBrace
       buffer.writeln(
         '  ${dao['daoType']} get ${dao['getterName']} => $databaseField.${dao['sourcePath']};',
       );
+    }
+    // LocalStorageRepository getter 추가
+    if (hasLocalStorage) {
+      buffer.writeln();
+      buffer.writeln('  @override');
+      buffer.writeln('  ILocalStorageRepository get localStorageRepository => $lsField;');
     }
     buffer.writeln('  {{/has_firebase}}');
 
