@@ -218,17 +218,22 @@ class GitignoreMerger {
         continue;
       }
 
-      // 템플릿에 없는 브릭만의 패턴 (개선사항)
+      // Brick-specific improvements 섹션 내부의 패턴은 유지
+      // (이전 동기화에서 추가된 개선사항 재사용)
+      if (inBrickImprovements) {
+        // 이미 본 패턴은 중복 추가하지 않음
+        if (seenPatterns.contains(trimmed)) continue;
+        seenPatterns.add(trimmed);
+        improvements.add(line);
+        continue;
+      }
+
+      // 템플릿에 없는 브릭만의 패턴 (새로운 개선사항)
       if (!templateSet.contains(trimmed)) {
         // 이미 본 패턴은 중복 추가하지 않음
         if (seenPatterns.contains(trimmed)) continue;
         seenPatterns.add(trimmed);
-
-        // Brick-specific improvements 섹션 내부의 패턴만 추출
-        // (이전 동기화에서 추가된 개선사항 재사용 방지)
-        if (!inBrickImprovements) {
-          improvements.add(line);
-        }
+        improvements.add(line);
       }
     }
 
@@ -244,14 +249,27 @@ class GitignoreMerger {
 
     // 브릭 개선사항이 있으면 파일 끝에 추가
     if (improvements.isNotEmpty) {
-      // 마지막 빈 줄 확인
-      if (result.isNotEmpty && result.last.trim().isNotEmpty) {
-        result.add('');
+      // 템플릿에 이미 "# Brick-specific improvements" 섹션이 있는지 확인
+      final hasExistingSection = templateLines.any(
+        (line) => line.trim() == '# Brick-specific improvements',
+      );
+
+      // 기존 섹션이 없을 때만 헤더 추가
+      if (!hasExistingSection) {
+        // 마지막 빈 줄 확인
+        if (result.isNotEmpty && result.last.trim().isNotEmpty) {
+          result.add('');
+        }
+        result.add('# Brick-specific improvements');
       }
 
-      result
-        ..add('# Brick-specific improvements')
-        ..addAll(improvements);
+      // 중복 패턴 방지: 템플릿에 이미 있는 패턴은 추가하지 않음
+      final templateSet = templateLines.map((l) => l.trim()).toSet();
+      for (final improvement in improvements) {
+        if (!templateSet.contains(improvement.trim())) {
+          result.add(improvement);
+        }
+      }
     }
 
     return result;

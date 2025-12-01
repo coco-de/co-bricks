@@ -9,6 +9,8 @@ class ProjectConfig {
     required this.orgName,
     required this.orgTld,
     this.projectNameSnake,
+    this.tld,
+    this.subdomain,
     this.githubOrg,
     this.githubRepo,
     this.randomProjectId,
@@ -20,7 +22,12 @@ class ProjectConfig {
   final String projectName;
   final String? projectNameSnake;
   final String orgName;
+  /// Bundle ID용 TLD (예: im → im.cocode.studio)
   final String orgTld;
+  /// 도메인 suffix (예: studio → cocode.studio)
+  final String? tld;
+  /// 도메인 prefix (예: cocode → cocode.studio)
+  final String? subdomain;
   final String? githubOrg;
   final String? githubRepo;
   final String? randomProjectId;
@@ -87,6 +94,8 @@ class EnvrcService {
     String? projectNameSnake;
     String? orgName;
     String? orgTld;
+    String? tld;
+    String? subdomain;
     String? githubOrg;
     String? githubRepo;
     String? randomProjectId;
@@ -120,8 +129,11 @@ class EnvrcService {
           case 'ORG_NAME':
             orgName = value;
           case 'ORG_TLD':
-          case 'TLD':
             orgTld = value;
+          case 'TLD':
+            tld = value;
+          case 'SUBDOMAIN':
+            subdomain = value;
           case 'GITHUB_ORG':
             githubOrg = value;
           case 'GITHUB_REPO':
@@ -164,6 +176,8 @@ class EnvrcService {
       projectNameSnake: projectNameSnake,
       orgName: orgName,
       orgTld: orgTld,
+      tld: tld,
+      subdomain: subdomain,
       githubOrg: githubOrg,
       githubRepo: githubRepo,
       randomProjectId: randomProjectId,

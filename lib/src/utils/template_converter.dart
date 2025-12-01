@@ -24,6 +24,12 @@ class TemplateConverter {
 
     // 패턴 순서가 중요합니다. 더 구체적인 패턴을 먼저 적용해야 합니다.
 
+    // -1. .envrc 환경 변수 패턴 (최우선 - 변수 값이 다른 패턴에 매칭되기 전에 처리)
+    patterns.addAll(_buildEnvrcPatterns(config));
+
+    // -0.5. AWS/Terraform 자격 증명 패턴 (보안 자격 증명 템플릿화)
+    patterns.addAll(_buildAwsCredentialPatterns());
+
     // 0. GitHub URL 패턴 (가장 먼저 적용! 프로젝트명 변환 전에 처리)
     if (config.githubOrg != null && config.githubRepo != null) {
       patterns.addAll(
@@ -64,7 +70,15 @@ class TemplateConverter {
     );
 
     // 3. 도메인 패턴 (app-staging.good_teacher.im 등)
-    patterns.addAll(_buildDomainPatterns(projectNames, orgTlds));
+    // subdomain과 tld가 있으면 subdomain.tld 패턴 사용, 아니면 projectName.orgTld 패턴 사용
+    patterns.addAll(
+      _buildDomainPatterns(
+        projectNames,
+        orgTlds,
+        subdomain: config.subdomain,
+        tld: config.tld,
+      ),
+    );
 
     // 4. 이메일 주소 패턴
     patterns.addAll(
@@ -1798,6 +1812,43 @@ class TemplateConverter {
           RegExp('${_escapeRegex(orgCamel)}UserInfo'),
           'scopedUserInfo',
         ),
+
+        // === 자연어 컨텍스트 패턴 (titleCase 사용) - pascalCase보다 먼저 처리 ===
+
+        // echo 문 내의 조직명: echo "... Cocode..." → {{org_name.titleCase()}}
+        ReplacementPattern(
+          RegExp('echo\\s+"[^"]*${_escapeRegex(orgPascal)}'),
+          'echo "{{org_name.titleCase()}}',
+        ),
+        // echo 문 뒤에 이모지+공백이 있는 경우: echo "    📚 Cocode..."
+        ReplacementPattern(
+          RegExp('📚\\s+${_escapeRegex(orgPascal)}'),
+          '📚 {{org_name.titleCase()}}',
+        ),
+
+        // description 내의 조직명: "...for Cocode." → "...for {{org_name.titleCase()}}."
+        ReplacementPattern(
+          RegExp('for ${_escapeRegex(orgPascal)}\\.'),
+          'for {{org_name.titleCase()}}.',
+        ),
+        ReplacementPattern(
+          RegExp('for ${_escapeRegex(orgTitle)}\\.'),
+          'for {{org_name.titleCase()}}.',
+        ),
+
+        // description: "Shared dependencies package for Cocode."
+        ReplacementPattern(
+          RegExp('description:\\s*"[^"]*${_escapeRegex(orgPascal)}"'),
+          'description: "{{org_name.titleCase()}}"',
+        ),
+        // "Shared dependencies package for Cocode." 패턴
+        ReplacementPattern(
+          RegExp('"Shared dependencies package for ${_escapeRegex(orgPascal)}\\."'),
+          '"Shared dependencies package for {{org_name.titleCase()}}."',
+        ),
+
+        // === 기술적 컨텍스트 패턴 ===
+
         // 하이픈(-) 패턴: lowerCase 사용
         ReplacementPattern(
           RegExp('-${_escapeRegex(orgLower)}-'),
@@ -1825,6 +1876,7 @@ class TemplateConverter {
           '.{{org_name.dotCase()}}',
         ),
         // PascalCase 패턴: Cocode → {{org_name.pascalCase()}}
+        // (자연어 컨텍스트 패턴 이후에 처리되므로 기술적 맥락만 매칭)
         ReplacementPattern(
           RegExp('\\b${_escapeRegex(orgPascal)}\\b'),
           '{{org_name.pascalCase()}}',
@@ -3425,19 +3477,83 @@ class TemplateConverter {
   }
 
   /// 도메인 패턴 생성
+  ///
+  /// subdomain과 tld가 제공되면 cocode.studio 패턴 (subdomain.tld) 사용
+  /// 그렇지 않으면 기존 blueprint.im 패턴 (projectName.orgTld) 사용
   static List<ReplacementPattern> _buildDomainPatterns(
     List<String> projectNames,
-    List<String> orgTlds,
-  ) {
+    List<String> orgTlds, {
+    String? subdomain,
+    String? tld,
+  }) {
     final patterns = <ReplacementPattern>[];
 
+    // subdomain과 tld가 모두 있으면 subdomain.tld 패턴 추가
+    if (subdomain != null && tld != null) {
+      // cocode.studio → {{subdomain}}.{{tld}} 패턴
+      for (final prefix in ['dev', 'stg', 'staging', 'prod', 'production']) {
+        // webcredentials:dev.cocode.studio 패턴
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              '(webcredentials|applinks):$prefix\\.'
+              '${_escapeRegex(subdomain)}\\.${_escapeRegex(tld)}',
+            ),
+            '\$1:$prefix.{{subdomain}}.{{tld}}',
+          ),
+        );
+        // 일반 도메인 패턴 (prefix 포함)
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              '$prefix\\.${_escapeRegex(subdomain)}\\.${_escapeRegex(tld)}\\b',
+            ),
+            '$prefix.{{subdomain}}.{{tld}}',
+          ),
+        );
+      }
+
+      patterns.addAll([
+        // app-staging.cocode.studio 패턴
+        ReplacementPattern(
+          RegExp(
+            'app-staging\\.${_escapeRegex(subdomain)}\\.${_escapeRegex(tld)}\\b',
+          ),
+          'app-staging.{{subdomain}}.{{tld}}',
+        ),
+        // app-development.cocode.studio 패턴
+        ReplacementPattern(
+          RegExp(
+            'app-development\\.${_escapeRegex(subdomain)}\\.${_escapeRegex(tld)}\\b',
+          ),
+          'app-development.{{subdomain}}.{{tld}}',
+        ),
+        // 기본 도메인 패턴 (cocode.studio)
+        ReplacementPattern(
+          RegExp(
+            '\\b${_escapeRegex(subdomain)}\\.${_escapeRegex(tld)}\\b',
+          ),
+          '{{subdomain}}.{{tld}}',
+        ),
+        // iOS entitlements 도메인 패턴
+        // webcredentials:cocode.studio → webcredentials:{{subdomain}}.{{tld}}
+        ReplacementPattern(
+          RegExp(
+            '(webcredentials|applinks):${_escapeRegex(subdomain)}\\.${_escapeRegex(tld)}',
+          ),
+          r'$1:{{subdomain}}.{{tld}}',
+        ),
+      ]);
+    }
+
+    // 기존 projectName.orgTld 패턴 (하위 호환성 유지)
     for (final projectName in projectNames) {
       final projectParam = projectName.replaceAll('_', '-');
 
       for (final orgTld in orgTlds) {
         // iOS entitlements 도메인 패턴 (webcredentials, applinks)
-        // dev.blueprint.im → dev.{{project_name.paramCase()}}.{{tld}}
-        // stg.blueprint.im → stg.{{project_name.paramCase()}}.{{tld}}
+        // dev.blueprint.im → dev.{{subdomain}}.{{tld}}
+        // stg.blueprint.im → stg.{{subdomain}}.{{tld}}
         for (final prefix in ['dev', 'stg', 'staging', 'prod', 'production']) {
           // webcredentials:dev.blueprint.im, applinks:dev.blueprint.im 패턴
           // (prefix가 있는 entitlements 도메인)
@@ -3447,7 +3563,7 @@ class TemplateConverter {
                 '(webcredentials|applinks):$prefix\\.'
                 '${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}',
               ),
-              '\$1:$prefix.{{project_name.paramCase()}}.{{tld}}',
+              '\$1:$prefix.{{subdomain}}.{{tld}}',
             ),
           );
           patterns.add(
@@ -3456,7 +3572,7 @@ class TemplateConverter {
                 '(webcredentials|applinks):$prefix\\.'
                 '${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}',
               ),
-              '\$1:$prefix.{{project_name.paramCase()}}.{{tld}}',
+              '\$1:$prefix.{{subdomain}}.{{tld}}',
             ),
           );
           // 일반 도메인 패턴 (prefix 포함) - entitlements용
@@ -3465,7 +3581,7 @@ class TemplateConverter {
               RegExp(
                 '$prefix\\.${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}\\b',
               ),
-              '$prefix.{{project_name.paramCase()}}.{{tld}}',
+              '$prefix.{{subdomain}}.{{tld}}',
             ),
           );
           patterns.add(
@@ -3473,7 +3589,7 @@ class TemplateConverter {
               RegExp(
                 '$prefix\\.${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}\\b',
               ),
-              '$prefix.{{project_name.paramCase()}}.{{tld}}',
+              '$prefix.{{subdomain}}.{{tld}}',
             ),
           );
         }
@@ -3483,56 +3599,249 @@ class TemplateConverter {
             RegExp(
               'app-staging\\.${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}\\b',
             ),
-            'app-staging.{{project_name.paramCase()}}.{{tld}}',
+            'app-staging.{{subdomain}}.{{tld}}',
           ),
           ReplacementPattern(
             RegExp(
               'app-staging\\.${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}\\b',
             ),
-            'app-staging.{{project_name.paramCase()}}.{{tld}}',
+            'app-staging.{{subdomain}}.{{tld}}',
           ),
           ReplacementPattern(
             RegExp(
               'app-development\\.${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}\\b',
             ),
-            'app-development.{{project_name.paramCase()}}.{{tld}}',
+            'app-development.{{subdomain}}.{{tld}}',
           ),
           ReplacementPattern(
             RegExp(
               'app-development\\.${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}\\b',
             ),
-            'app-development.{{project_name.paramCase()}}.{{tld}}',
+            'app-development.{{subdomain}}.{{tld}}',
           ),
           // 기본 도메인 패턴 (blueprint.im) - entitlements용
           ReplacementPattern(
             RegExp(
               '\\b${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}\\b',
             ),
-            '{{project_name.paramCase()}}.{{tld}}',
+            '{{subdomain}}.{{tld}}',
           ),
           ReplacementPattern(
             RegExp(
               '\\b${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}\\b',
             ),
-            '{{project_name.paramCase()}}.{{tld}}',
+            '{{subdomain}}.{{tld}}',
           ),
           // iOS entitlements 도메인 패턴 (webcredentials:, applinks: 뒤에 오는 도메인)
-          // webcredentials:blueprint.im → webcredentials:{{project_name.paramCase()}}.{{tld}}
+          // webcredentials:blueprint.im → webcredentials:{{subdomain}}.{{tld}}
           ReplacementPattern(
             RegExp(
               '(webcredentials|applinks):${_escapeRegex(projectParam)}\\.${_escapeRegex(orgTld)}',
             ),
-            r'$1:{{project_name.paramCase()}}.{{tld}}',
+            r'$1:{{subdomain}}.{{tld}}',
           ),
           ReplacementPattern(
             RegExp(
               '(webcredentials|applinks):${_escapeRegex(projectName)}\\.${_escapeRegex(orgTld)}',
             ),
-            r'$1:{{project_name.paramCase()}}.{{tld}}',
+            r'$1:{{subdomain}}.{{tld}}',
           ),
         ]);
       }
     }
+
+    return patterns;
+  }
+
+  /// .envrc 환경 변수 패턴 생성 (최우선 적용)
+  /// ORG_NAME, PROJECT_NAME 등의 환경 변수 값을 올바르게 템플릿화
+  static List<ReplacementPattern> _buildEnvrcPatterns(ProjectConfig config) {
+    final patterns = <ReplacementPattern>[];
+    final orgName = config.orgName;
+    final projectName = config.projectName;
+    final orgTld = config.orgTld;
+
+    // export ORG_NAME='cocode' → export ORG_NAME='{{org_name.lowerCase()}}'
+    patterns.add(
+      ReplacementPattern(
+        RegExp("export ORG_NAME='${_escapeRegex(orgName.toLowerCase())}'"),
+        "export ORG_NAME='{{org_name.lowerCase()}}'",
+      ),
+    );
+
+    // export ORG_NAME="cocode" (쌍따옴표 버전)
+    patterns.add(
+      ReplacementPattern(
+        RegExp('export ORG_NAME="${_escapeRegex(orgName.toLowerCase())}"'),
+        'export ORG_NAME="{{org_name.lowerCase()}}"',
+      ),
+    );
+
+    // export PROJECT_NAME='blueprint' → export PROJECT_NAME='{{project_name.paramCase()}}'
+    // 프로젝트 이름은 루트 파일 경로 및 GitHub 레포 주소에서 paramCase 사용
+    patterns.add(
+      ReplacementPattern(
+        RegExp("export PROJECT_NAME='${_escapeRegex(projectName)}'"),
+        "export PROJECT_NAME='{{project_name.paramCase()}}'",
+      ),
+    );
+
+    // export PROJECT_NAME="blueprint" (쌍따옴표 버전)
+    patterns.add(
+      ReplacementPattern(
+        RegExp('export PROJECT_NAME="${_escapeRegex(projectName)}"'),
+        'export PROJECT_NAME="{{project_name.paramCase()}}"',
+      ),
+    );
+
+    // export ORG_TLD='im' → export ORG_TLD='{{org_tld}}'
+    patterns.add(
+      ReplacementPattern(
+        RegExp("export ORG_TLD='${_escapeRegex(orgTld)}'"),
+        "export ORG_TLD='{{org_tld}}'",
+      ),
+    );
+
+    // export ORG_TLD="im" (쌍따옴표 버전)
+    patterns.add(
+      ReplacementPattern(
+        RegExp('export ORG_TLD="${_escapeRegex(orgTld)}"'),
+        'export ORG_TLD="{{org_tld}}"',
+      ),
+    );
+
+    // TLD (도메인 suffix) 패턴
+    if (config.tld != null) {
+      final tld = config.tld!;
+      // export TLD='studio' → export TLD='{{tld}}'
+      patterns.add(
+        ReplacementPattern(
+          RegExp("export TLD='${_escapeRegex(tld)}'"),
+          "export TLD='{{tld}}'",
+        ),
+      );
+
+      // export TLD="studio" (쌍따옴표 버전)
+      patterns.add(
+        ReplacementPattern(
+          RegExp('export TLD="${_escapeRegex(tld)}"'),
+          'export TLD="{{tld}}"',
+        ),
+      );
+    }
+
+    // SUBDOMAIN (도메인 prefix) 패턴
+    if (config.subdomain != null) {
+      final subdomain = config.subdomain!;
+      // export SUBDOMAIN='cocode' → export SUBDOMAIN='{{subdomain}}'
+      patterns.add(
+        ReplacementPattern(
+          RegExp("export SUBDOMAIN='${_escapeRegex(subdomain)}'"),
+          "export SUBDOMAIN='{{subdomain}}'",
+        ),
+      );
+
+      // export SUBDOMAIN="cocode" (쌍따옴표 버전)
+      patterns.add(
+        ReplacementPattern(
+          RegExp('export SUBDOMAIN="${_escapeRegex(subdomain)}"'),
+          'export SUBDOMAIN="{{subdomain}}"',
+        ),
+      );
+    }
+
+    return patterns;
+  }
+
+  /// AWS/Terraform 자격 증명 패턴 생성
+  /// 보안 민감 정보를 템플릿 플레이스홀더로 변환
+  static List<ReplacementPattern> _buildAwsCredentialPatterns() {
+    final patterns = <ReplacementPattern>[];
+
+    // Terraform 데이터베이스 비밀번호 패턴
+    // TF_VAR_DATABASE_PASSWORD_DEVELOPMENT="..." → "{{development-database}}"
+    for (final env in ['DEVELOPMENT', 'STAGING', 'PRODUCTION']) {
+      final envLower = env.toLowerCase();
+      // 쌍따옴표 버전
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'export TF_VAR_DATABASE_PASSWORD_$env="[^"]+"',
+          ),
+          'export TF_VAR_DATABASE_PASSWORD_$env="{{$envLower-database}}"',
+        ),
+      );
+      // 따옴표 없는 버전
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            "export TF_VAR_DATABASE_PASSWORD_$env='[^']+'",
+          ),
+          "export TF_VAR_DATABASE_PASSWORD_$env='{{$envLower-database}}'",
+        ),
+      );
+    }
+
+    // AWS Access Key ID 패턴
+    // export AWS_ACCESS_KEY_ID="AKIA..." → export AWS_ACCESS_KEY_ID="{{aws_access_key_id}}"
+    patterns.add(
+      ReplacementPattern(
+        RegExp('export AWS_ACCESS_KEY_ID="[^"]+"'),
+        'export AWS_ACCESS_KEY_ID="{{aws_access_key_id}}"',
+      ),
+    );
+    patterns.add(
+      ReplacementPattern(
+        RegExp("export AWS_ACCESS_KEY_ID='[^']+'"),
+        "export AWS_ACCESS_KEY_ID='{{aws_access_key_id}}'",
+      ),
+    );
+
+    // AWS Secret Access Key 패턴
+    // export AWS_SECRET_ACCESS_KEY="..." → export AWS_SECRET_ACCESS_KEY="{{aws_secret_access_key}}"
+    patterns.add(
+      ReplacementPattern(
+        RegExp('export AWS_SECRET_ACCESS_KEY="[^"]+"'),
+        'export AWS_SECRET_ACCESS_KEY="{{aws_secret_access_key}}"',
+      ),
+    );
+    patterns.add(
+      ReplacementPattern(
+        RegExp("export AWS_SECRET_ACCESS_KEY='[^']+'"),
+        "export AWS_SECRET_ACCESS_KEY='{{aws_secret_access_key}}'",
+      ),
+    );
+
+    // Terraform config.auto.tfvars 패턴
+    // hosted_zone_id = "Z00741..." → hosted_zone_id = "YOUR_HOSTED_ZONE_ID"
+    patterns.add(
+      ReplacementPattern(
+        RegExp('hosted_zone_id\\s*=\\s*"Z[A-Z0-9]+"'),
+        'hosted_zone_id = "YOUR_HOSTED_ZONE_ID"',
+      ),
+    );
+
+    // ACM 인증서 ARN 패턴 (ap-northeast-2)
+    // certificate_arn = "arn:aws:acm:ap-northeast-2:..." → "YOUR_ACM_CERTIFICATE_ARN"
+    patterns.add(
+      ReplacementPattern(
+        RegExp(
+          'certificate_arn\\s*=\\s*"arn:aws:acm:ap-northeast-2:[^"]+"',
+        ),
+        'certificate_arn = "YOUR_ACM_CERTIFICATE_ARN"',
+      ),
+    );
+
+    // CloudFront용 ACM 인증서 ARN 패턴 (us-east-1)
+    // cloudfront_certificate_arn = "arn:aws:acm:us-east-1:..." → "YOUR_CLOUDFRONT_CERTIFICATE_ARN"
+    patterns.add(
+      ReplacementPattern(
+        RegExp(
+          'cloudfront_certificate_arn\\s*=\\s*"arn:aws:acm:us-east-1:[^"]+"',
+        ),
+        'cloudfront_certificate_arn = "YOUR_CLOUDFRONT_CERTIFICATE_ARN"',
+      ),
+    );
 
     return patterns;
   }

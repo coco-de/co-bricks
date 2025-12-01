@@ -9,6 +9,7 @@ class SavedProjectConfig {
     required this.description,
     required this.organization,
     required this.tld,
+    required this.subdomain,
     required this.orgTld,
     required this.githubOrg,
     required this.githubRepo,
@@ -41,6 +42,7 @@ class SavedProjectConfig {
       description: json['description'] as String,
       organization: json['organization'] as String,
       tld: json['tld'] as String,
+      subdomain: json['subdomain'] as String,
       orgTld: json['org_tld'] as String,
       githubOrg: json['github_org'] as String,
       githubRepo: json['github_repo'] as String,
@@ -84,10 +86,13 @@ class SavedProjectConfig {
   /// Organization name
   final String organization;
 
-  /// Top-level domain
+  /// Top-level domain (도메인 suffix, 예: studio → cocode.studio)
   final String tld;
 
-  /// Organization TLD
+  /// Subdomain (도메인 prefix, 예: cocode → cocode.studio)
+  final String subdomain;
+
+  /// Organization TLD (Bundle ID용, 예: im → im.cocode.studio)
   final String orgTld;
 
   /// GitHub organization
@@ -161,6 +166,7 @@ class SavedProjectConfig {
       'description': description,
       'organization': organization,
       'tld': tld,
+      'subdomain': subdomain,
       'org_tld': orgTld,
       'github_org': githubOrg,
       'github_repo': githubRepo,

@@ -67,8 +67,12 @@ class CreateCommand extends Command<int> {
       )
       ..addOption(
         'tld',
-        help: 'Top-level domain (e.g., com, io, im)',
+        help: 'Top-level domain suffix for domain (e.g., studio → cocode.studio)',
         defaultsTo: 'im',
+      )
+      ..addOption(
+        'subdomain',
+        help: 'Subdomain prefix for domain (e.g., cocode → cocode.studio)',
       )
       ..addOption(
         'org-tld',
@@ -185,6 +189,7 @@ class CreateCommand extends Command<int> {
           description: vars['description'] as String,
           organization: vars['org_name'] as String,
           tld: vars['tld'] as String,
+          subdomain: vars['subdomain'] as String,
           orgTld: vars['org_tld'] as String,
           githubOrg: vars['github_org'] as String,
           githubRepo: vars['github_repo'] as String,
@@ -307,12 +312,26 @@ class CreateCommand extends Command<int> {
     }
     vars['org_name'] = organization ?? _toTitleCase(projectName);
 
-    // TLD
+    // TLD (도메인 suffix)
     var tld = argResults!['tld'] as String;
     if (interactive) {
-      tld = _logger.prompt('Top-level domain:', defaultValue: tld);
+      tld = _logger.prompt(
+        'Top-level domain (도메인 suffix, e.g., studio):',
+        defaultValue: tld,
+      );
     }
     vars['tld'] = tld;
+
+    // Subdomain (도메인 prefix)
+    var subdomain = argResults!['subdomain'] as String?;
+    if (interactive && (subdomain == null || subdomain.isEmpty)) {
+      subdomain = _logger.prompt(
+        'Subdomain (도메인 prefix, e.g., cocode → cocode.studio):',
+        defaultValue: projectName.toLowerCase().replaceAll('_', '-'),
+      );
+    }
+    vars['subdomain'] = subdomain ??
+        projectName.toLowerCase().replaceAll('_', '-');
 
     // Org TLD
     var orgTld = argResults!['org-tld'] as String;

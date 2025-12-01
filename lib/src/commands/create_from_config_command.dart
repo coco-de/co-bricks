@@ -82,6 +82,7 @@ class CreateFromConfigCommand extends Command<int> {
         'description': config.description,
         'org_name': config.organization,
         'tld': config.tld,
+        'subdomain': config.subdomain,
         'org_tld': config.orgTld,
         'github_org': config.githubOrg,
         'github_repo': config.githubRepo,
