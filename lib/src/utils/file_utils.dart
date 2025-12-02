@@ -462,6 +462,9 @@ class FileUtils {
     '.xcconfig',
     '.xcscheme',
     '.entitlements', // iOS entitlements (XML 형식)
+    '.tf', // Terraform configuration files
+    '.tfvars', // Terraform variable files
+    '.hcl', // HashiCorp Configuration Language files
   ];
 
   /// 특수 파일명 목록

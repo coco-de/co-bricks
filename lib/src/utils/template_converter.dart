@@ -30,6 +30,9 @@ class TemplateConverter {
     // -0.5. AWS/Terraform 자격 증명 패턴 (보안 자격 증명 템플릿화)
     patterns.addAll(_buildAwsCredentialPatterns());
 
+    // -0.4. Terraform config.auto.tfvars 패턴
+    patterns.addAll(_buildTerraformTfvarsPatterns(config));
+
     // 0. GitHub URL 패턴 (가장 먼저 적용! 프로젝트명 변환 전에 처리)
     if (config.githubOrg != null && config.githubRepo != null) {
       patterns.addAll(
@@ -3812,7 +3815,6 @@ class TemplateConverter {
       ),
     );
 
-    // Terraform config.auto.tfvars 패턴
     // hosted_zone_id = "Z00741..." → hosted_zone_id = "YOUR_HOSTED_ZONE_ID"
     patterns.add(
       ReplacementPattern(
@@ -3842,6 +3844,94 @@ class TemplateConverter {
         'cloudfront_certificate_arn = "YOUR_CLOUDFRONT_CERTIFICATE_ARN"',
       ),
     );
+
+    return patterns;
+  }
+
+  /// Terraform config.auto.tfvars 패턴 생성
+  static List<ReplacementPattern> _buildTerraformTfvarsPatterns(
+    ProjectConfig config,
+  ) {
+    final patterns = <ReplacementPattern>[];
+
+    // projectNames에서 기본 프로젝트명 추출
+    for (final projectName in config.projectNames) {
+      final baseSnake = projectName; // good_teacher
+      final baseParam = projectName.replaceAll('_', '-'); // good-teacher
+
+      // project_name = "cocode" → project_name = "{{project_name.paramCase()}}"
+      patterns.add(
+        ReplacementPattern(
+          RegExp('project_name\\s*=\\s*"${_escapeRegex(baseSnake)}"'),
+          'project_name = "{{project_name.paramCase()}}"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp('project_name\\s*=\\s*"${_escapeRegex(baseParam)}"'),
+          'project_name = "{{project_name.paramCase()}}"',
+        ),
+      );
+
+      // deployment_bucket_name = "cocode-deployment-3313112"
+      //   → deployment_bucket_name = "{{project_name.paramCase()}}-deployment-{{randomawsid}}"
+      // AWS ID는 6-7자리 숫자를 허용
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'deployment_bucket_name\\s*=\\s*"${_escapeRegex(baseSnake)}-deployment-\\d{6,7}"',
+          ),
+          'deployment_bucket_name = "{{project_name.paramCase()}}-deployment-{{randomawsid}}"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'deployment_bucket_name\\s*=\\s*"${_escapeRegex(baseParam)}-deployment-\\d{6,7}"',
+          ),
+          'deployment_bucket_name = "{{project_name.paramCase()}}-deployment-{{randomawsid}}"',
+        ),
+      );
+    }
+
+    // top_domain = "cocode.im" → top_domain = "{{subdomain.paramCase()}}.{{tld}}"
+    // subdomain.tld 패턴 (우선)
+    final subdomain = config.subdomain;
+    final tld = config.tld;
+    if (subdomain != null && tld != null) {
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'top_domain\\s*=\\s*"${_escapeRegex(subdomain)}\\.${_escapeRegex(tld)}"',
+          ),
+          'top_domain = "{{subdomain.paramCase()}}.{{tld}}"',
+        ),
+      );
+    }
+
+    // projectName.orgTld 패턴 (fallback)
+    final orgTld = config.orgTld;
+    for (final projectName in config.projectNames) {
+      final baseSnake = projectName;
+      final baseParam = projectName.replaceAll('_', '-');
+
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'top_domain\\s*=\\s*"${_escapeRegex(baseSnake)}\\.${_escapeRegex(orgTld)}"',
+          ),
+          'top_domain = "{{subdomain.paramCase()}}.{{tld}}"',
+        ),
+      );
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'top_domain\\s*=\\s*"${_escapeRegex(baseParam)}\\.${_escapeRegex(orgTld)}"',
+          ),
+          'top_domain = "{{subdomain.paramCase()}}.{{tld}}"',
+        ),
+      );
+    }
 
     return patterns;
   }
