@@ -33,6 +33,10 @@ class TemplateConverter {
     // -0.4. Terraform config.auto.tfvars 패턴
     patterns.addAll(_buildTerraformTfvarsPatterns(config));
 
+    // -0.3. Terraform .tf 파일 패턴 - 하드코딩 값 변환 (subdomain 기반)
+    // 참고: org_name → subdomain 재변환 패턴은 _buildOrgPatterns 이후에 처리 필요
+    patterns.addAll(_buildTerraformTfHardcodedPatterns(config));
+
     // 0. GitHub URL 패턴 (가장 먼저 적용! 프로젝트명 변환 전에 처리)
     if (config.githubOrg != null && config.githubRepo != null) {
       patterns.addAll(
@@ -3929,6 +3933,224 @@ class TemplateConverter {
             'top_domain\\s*=\\s*"${_escapeRegex(baseParam)}\\.${_escapeRegex(orgTld)}"',
           ),
           'top_domain = "{{subdomain.paramCase()}}.{{tld}}"',
+        ),
+      );
+    }
+
+    return patterns;
+  }
+
+  /// Terraform .tf 파일 패턴 - 하드코딩된 값 변환 (subdomain 기반)
+  /// 위치: -0.3 (OrgPatterns 전에 실행)
+  static List<ReplacementPattern> _buildTerraformTfHardcodedPatterns(
+    ProjectConfig config,
+  ) {
+    final patterns = <ReplacementPattern>[];
+
+    final subdomain = config.subdomain;
+    final randomAwsId = config.randomAwsId;
+
+    final randomProjectId = config.randomProjectId;
+    final orgName = config.orgName.toLowerCase();
+
+    final tld = config.tld;
+    final orgTld = config.orgTld;
+
+    // Route53 파일 첫번째 줄 주석 패턴 (orgName.orgTld 기반)
+    // # Route53 도메인 설정 (cocode.im) → # Route53 도메인 설정 ({{subdomain.paramCase()}}.{{tld}})
+    // Note: 실제 도메인은 orgName.orgTld 형태 (cocode.im)이지만,
+    // 템플릿 변수는 subdomain.tld로 변환 (사용자 요청에 따라)
+    if (subdomain != null && tld != null) {
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            '# Route53 도메인 설정 \\(${_escapeRegex(orgName)}\\.${_escapeRegex(orgTld)}\\)',
+          ),
+          '# Route53 도메인 설정 ({{subdomain.paramCase()}}.{{tld}})',
+        ),
+      );
+    }
+
+    // Storage CORS 주석 패턴 (orgName 기반)
+    if (subdomain != null && tld != null) {
+      // # production: https://Cocode → # production: https://{{subdomain.pascalCase()}}.{{tld}}
+      final orgNamePascal = orgName[0].toUpperCase() + orgName.substring(1);
+      patterns.add(
+        ReplacementPattern(
+          RegExp('# production: https://$orgNamePascal'),
+          '# production: https://{{subdomain.pascalCase()}}.{{tld}}',
+        ),
+      );
+      // # subdomains: https://*.Cocode → # subdomains: https://*.{{subdomain.pascalCase()}}.{{tld}}
+      patterns.add(
+        ReplacementPattern(
+          RegExp('# subdomains: https://\\*\\.$orgNamePascal'),
+          '# subdomains: https://*.{{subdomain.pascalCase()}}.{{tld}}',
+        ),
+      );
+      // # API domain → # API domain: https://api.{{subdomain.pascalCase()}}.{{tld}}
+      patterns.add(
+        ReplacementPattern(
+          RegExp(r'# API domain$', multiLine: true),
+          '# API domain: https://api.{{subdomain.pascalCase()}}.{{tld}}',
+        ),
+      );
+    }
+
+    // subdomain 기반 패턴 (subdomain이 있는 경우에만)
+    if (subdomain != null) {
+      // C. CloudFront aliases - 하드코딩된 subdomain 값 변환
+      // "stgcocode. → "stg{{subdomain.dotCase()}}.
+      patterns.add(
+        ReplacementPattern(
+          RegExp('"stg${_escapeRegex(subdomain)}\\.'),
+          '"stg{{subdomain.dotCase()}}.',
+        ),
+      );
+      // "devcocode. → "dev{{subdomain.dotCase()}}.
+      patterns.add(
+        ReplacementPattern(
+          RegExp('"dev${_escapeRegex(subdomain)}\\.'),
+          '"dev{{subdomain.dotCase()}}.',
+        ),
+      );
+
+      // Route53 App Links CNAME name 패턴
+      // name = "cocode" → name            = "{{subdomain.paramCase()}}"
+      patterns.add(
+        ReplacementPattern(
+          RegExp('name\\s*=\\s*"${_escapeRegex(subdomain)}"'),
+          'name            = "{{subdomain.paramCase()}}"',
+        ),
+      );
+      // name = "stgcocode" → name            = "stg{{subdomain.paramCase()}}"
+      patterns.add(
+        ReplacementPattern(
+          RegExp('name\\s*=\\s*"stg${_escapeRegex(subdomain)}"'),
+          'name            = "stg{{subdomain.paramCase()}}"',
+        ),
+      );
+      // name = "devcocode" → name            = "dev{{subdomain.paramCase()}}"
+      patterns.add(
+        ReplacementPattern(
+          RegExp('name\\s*=\\s*"dev${_escapeRegex(subdomain)}"'),
+          'name            = "dev{{subdomain.paramCase()}}"',
+        ),
+      );
+
+      // Route53 주석 패턴: # staging.cocode.과 → # staging.{{subdomain.dotCase()}}.과
+      patterns.add(
+        ReplacementPattern(
+          RegExp('# staging\\.${_escapeRegex(subdomain)}\\.과'),
+          '# staging.{{subdomain.dotCase()}}.과',
+        ),
+      );
+
+      // Route53 리소스 이름 패턴 (Terraform resource name)
+      // resource "aws_route53_record" "stgcocode_app_links" {
+      // → resource "aws_route53_record" "stg{{subdomain.snakeCase()}}_app_links" {
+      patterns.add(
+        ReplacementPattern(
+          RegExp('"stg${_escapeRegex(subdomain)}_app_links"'),
+          '"stg{{subdomain.snakeCase()}}_app_links"',
+        ),
+      );
+      // resource "aws_route53_record" "devcocode_app_links" {
+      // → resource "aws_route53_record" "dev{{subdomain.snakeCase()}}_app_links" {
+      patterns.add(
+        ReplacementPattern(
+          RegExp('"dev${_escapeRegex(subdomain)}_app_links"'),
+          '"dev{{subdomain.snakeCase()}}_app_links"',
+        ),
+      );
+      // resource "aws_route53_record" "cocode_app_links" {
+      // → resource "aws_route53_record" "{{subdomain.snakeCase()}}_app_links" {
+      patterns.add(
+        ReplacementPattern(
+          RegExp('"${_escapeRegex(subdomain)}_app_links"'),
+          '"{{subdomain.snakeCase()}}_app_links"',
+        ),
+      );
+
+      // Route53 App Links CNAME records 패턴 (subdomain 기반)
+      // records = ["cocode."] → records = ["{{subdomain.dotCase()}}."]
+      patterns.add(
+        ReplacementPattern(
+          RegExp('\\["${_escapeRegex(subdomain)}\\."]'),
+          '["{{subdomain.dotCase()}}."]',
+        ),
+      );
+      // records = ["staging.cocode."] → records = ["staging.{{subdomain.dotCase()}}."]
+      patterns.add(
+        ReplacementPattern(
+          RegExp('\\["staging\\.${_escapeRegex(subdomain)}\\."]'),
+          '["staging.{{subdomain.dotCase()}}."]',
+        ),
+      );
+      // records = ["development.cocode."] → records = ["development.{{subdomain.dotCase()}}."]
+      patterns.add(
+        ReplacementPattern(
+          RegExp('\\["development\\.${_escapeRegex(subdomain)}\\."]'),
+          '["development.{{subdomain.dotCase()}}."]',
+        ),
+      );
+
+      // CloudFront production alias (subdomain.${var.top_domain})
+      // "cocode.${var.top_domain}" → "{{subdomain.dotCase()}}.${var.top_domain}"
+      patterns.add(
+        ReplacementPattern(
+          RegExp('"${_escapeRegex(subdomain)}\\.\\' r'$' r'\{var\.top_domain\}"'),
+          r'"{{subdomain.dotCase()}}.${var.top_domain}"',
+        ),
+      );
+    }
+
+    // Firebase web.app 패턴 (orgName + randomProjectId 기반)
+    // cocode-elvv.web.app → {{project_name.lowerCase()}}-{{randomprojectid}}.web.app
+    if (randomProjectId != null) {
+      // Production: cocode-elvv.web.app
+      patterns.add(
+        ReplacementPattern(
+          RegExp('${_escapeRegex(orgName)}-${_escapeRegex(randomProjectId)}\\.web\\.app'),
+          '{{project_name.lowerCase()}}-{{randomprojectid}}.web.app',
+        ),
+      );
+      // Staging: cocode-elvv-stg.web.app
+      patterns.add(
+        ReplacementPattern(
+          RegExp('${_escapeRegex(orgName)}-${_escapeRegex(randomProjectId)}-stg\\.web\\.app'),
+          '{{project_name.lowerCase()}}-{{randomprojectid}}-stg.web.app',
+        ),
+      );
+      // Development: cocode-elvv-dev.web.app
+      patterns.add(
+        ReplacementPattern(
+          RegExp('${_escapeRegex(orgName)}-${_escapeRegex(randomProjectId)}-dev\\.web\\.app'),
+          '{{project_name.lowerCase()}}-{{randomprojectid}}-dev.web.app',
+        ),
+      );
+    }
+
+    // F. Storage configs randomawsid 패턴
+    // 하드코딩된 AWS ID → {{randomawsid}}
+    if (randomAwsId != null) {
+      for (final env in ['prod', 'staging', 'dev']) {
+        patterns.add(
+          ReplacementPattern(
+            RegExp('storage-$env-${_escapeRegex(randomAwsId)}'),
+            'storage-$env-{{randomawsid}}',
+          ),
+        );
+      }
+
+      // .envrc의 RANDOM_AWS_BUCKET_ID 패턴
+      // export RANDOM_AWS_BUCKET_ID="389178" → export RANDOM_AWS_BUCKET_ID="{{randomawsid}}"
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            'export RANDOM_AWS_BUCKET_ID="${_escapeRegex(randomAwsId)}"',
+          ),
+          'export RANDOM_AWS_BUCKET_ID="{{randomawsid}}"',
         ),
       );
     }

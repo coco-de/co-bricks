@@ -14,6 +14,7 @@ class ProjectConfig {
     this.githubOrg,
     this.githubRepo,
     this.randomProjectId,
+    this.randomAwsId,
     this.appleDeveloperId,
     this.teamId,
     this.itcTeamId,
@@ -22,15 +23,21 @@ class ProjectConfig {
   final String projectName;
   final String? projectNameSnake;
   final String orgName;
+
   /// Bundle ID용 TLD (예: im → im.cocode.studio)
   final String orgTld;
+
   /// 도메인 suffix (예: studio → cocode.studio)
   final String? tld;
+
   /// 도메인 prefix (예: cocode → cocode.studio)
   final String? subdomain;
   final String? githubOrg;
   final String? githubRepo;
   final String? randomProjectId;
+
+  /// AWS S3 버킷용 랜덤 ID (예: 389178)
+  final String? randomAwsId;
   final String? appleDeveloperId;
   final String? teamId;
   final String? itcTeamId;
@@ -52,10 +59,10 @@ class ProjectConfig {
   /// - blueprint → blueprint → blueprintService (단일 단어)
   /// 모두 커버 가능
   List<String> get projectNames => [
-        projectName,
-        if (projectNameSnake != null && projectNameSnake != projectName)
-          projectNameSnake!,
-      ];
+    projectName,
+    if (projectNameSnake != null && projectNameSnake != projectName)
+      projectNameSnake!,
+  ];
 }
 
 /// .envrc 파일 파싱 서비스
@@ -99,6 +106,7 @@ class EnvrcService {
     String? githubOrg;
     String? githubRepo;
     String? randomProjectId;
+    String? randomAwsId;
     String? appleDeveloperId;
     String? teamId;
     String? itcTeamId;
@@ -140,6 +148,8 @@ class EnvrcService {
             githubRepo = value;
           case 'RANDOM_PROJECT_ID':
             randomProjectId = value;
+          case 'RANDOM_AWS_BUCKET_ID':
+            randomAwsId = value;
           case 'APPLE_DEVELOPER_ID':
             appleDeveloperId = value;
           case 'TEAM_ID':
@@ -181,6 +191,7 @@ class EnvrcService {
       githubOrg: githubOrg,
       githubRepo: githubRepo,
       randomProjectId: randomProjectId,
+      randomAwsId: randomAwsId,
       appleDeveloperId: appleDeveloperId,
       teamId: teamId,
       itcTeamId: itcTeamId,
