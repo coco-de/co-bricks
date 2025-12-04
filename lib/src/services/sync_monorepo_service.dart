@@ -534,7 +534,7 @@ class SyncMonorepoService {
 
     // Mason 조건부 파일 구조 복원
     for (final structure in conditionalStructures) {
-      // Blueprint에서 복사된 파일 경로
+      // 소스 프로젝트에서 복사된 파일 경로
       final copiedFilePath = path.join(
         targetDir.path,
         structure.relativeDir,
@@ -550,13 +550,31 @@ class SyncMonorepoService {
 
       final innerFile = File(structure.innerFilePath);
 
-      // Blueprint에 해당 파일이 있으면 새 내용으로 업데이트
+      // 소스 프로젝트에 해당 파일이 있으면 새 내용으로 업데이트
       if (copiedFile.existsSync()) {
-        // Blueprint 파일 내용을 조건부 구조 내부 파일로 복사
-        final content = await copiedFile.readAsBytes();
-        await innerFile.writeAsBytes(content);
+        // 소스 파일 내용을 읽고 변환 후 조건부 구조 내부 파일로 저장
+        var content = await copiedFile.readAsString();
 
-        // Blueprint 파일 삭제 (조건부 구조로 대체)
+        // 텍스트 파일이면 TemplateConverter로 변환 적용
+        final isTextFile = await FileUtils.isTextFile(copiedFile);
+        if (isTextFile) {
+          final patterns = _getPatterns(config);
+
+          // GitHub Actions 파일의 ${{ }}를 이스케이프 처리
+          if (copiedFile.path.contains('.github') &&
+              (structure.actualFileName.endsWith('.yml') ||
+                  structure.actualFileName.endsWith('.yaml'))) {
+            content = content
+                .replaceAll(r'${{', r'${ { ')
+                .replaceAll('}}', ' } }');
+          }
+
+          content = TemplateConverter.convertContent(content, patterns);
+        }
+
+        await innerFile.writeAsString(content);
+
+        // 복사된 원본 파일 삭제 (조건부 구조로 대체)
         await copiedFile.delete();
 
         logger.info(
@@ -564,7 +582,7 @@ class SyncMonorepoService {
           '(${structure.condition})',
         );
       } else {
-        // Blueprint에 파일이 없으면 백업에서 복원
+        // 소스 프로젝트에 파일이 없으면 백업에서 복원
         final backupContent = conditionalBackups[structure.innerFilePath];
         if (backupContent != null) {
           await innerFile.writeAsBytes(backupContent);
@@ -681,7 +699,7 @@ class SyncMonorepoService {
 
   /// shared/dependencies/pubspec.yaml의 조건부 dependency 라인들을 보존
   ///
-  /// 1. Blueprint에서 service dependencies를 조건부로 변환
+  /// 1. 소스 프로젝트에서 service dependencies를 조건부로 변환
   /// 2. 백업된 조건부 라인 중 누락된 것들을 추가
   /// 3. 항상 모든 서비스(openapi, graphql, serverpod)를 조건부로 유지
   Future<void> _restorePubspecConditionalLines(
@@ -702,7 +720,7 @@ class SyncMonorepoService {
 
     logger.info('   🔄 Preserving conditional dependencies in pubspec.yaml...');
 
-    // Blueprint 내용 읽기
+    // 소스 프로젝트 내용 읽기
     final sourceContent = await sourcePubspec.readAsString();
     final sourceLines = sourceContent.split('\n');
     final result = <String>[];
@@ -821,7 +839,7 @@ class SyncMonorepoService {
       }
     }
 
-    // 만약 어떤 서비스도 변환되지 않았다면 (Blueprint에 서비스가 없는 경우)
+    // 만약 어떤 서비스도 변환되지 않았다면 (소스 프로젝트에 서비스가 없는 경우)
     // resources 라인 바로 뒤에 모든 서비스를 추가
     if (addedServices.isEmpty && foundResourcesLine) {
       final insertIndex = result.indexWhere(

@@ -310,14 +310,44 @@ class TemplateConverter {
   }
 
   /// org_tld 단독 패턴 생성 (im. 같은 패턴)
+  ///
+  /// 주의: 정부/공공기관 도메인(go.kr, or.kr 등)은 변환하지 않음
   static List<ReplacementPattern> _buildOrgTldPatterns(List<String> orgTlds) {
     final patterns = <ReplacementPattern>[];
 
+    // 정부/공공기관 도메인 접미사 - 이 뒤에 오는 TLD는 변환하지 않음
+    // 예: go.kr, or.kr, ac.kr, ne.kr, re.kr, co.kr, pe.kr, ms.kr 등
+    const publicDomainSuffixes = [
+      'go', // 정부기관
+      'or', // 비영리기관
+      'ac', // 교육기관
+      'ne', // 네트워크 사업자
+      're', // 연구기관
+      'co', // 기업
+      'pe', // 개인
+      'ms', // 군사기관
+      'kg', // 유치원
+      'es', // 초등학교
+      'hs', // 고등학교
+      'sc', // 학교
+    ];
+
     for (final orgTld in orgTlds) {
+      // 정부/공공기관 도메인 접미사 뒤에 오는 TLD는 변환하지 않음 (negative lookbehind)
+      // 예: go.kr → 변환 안 함, petmedi.kr → 변환함
+      final negativeLookbehind =
+          '(?<!${publicDomainSuffixes.map(_escapeRegex).join('|')})';
+
       patterns.addAll([
         // im. 패턴 (점 뒤에 공백이나 다른 문자)
+        // 단, go.kr, or.kr 같은 정부 도메인은 제외
         ReplacementPattern(
-          RegExp('\\b${_escapeRegex(orgTld)}\\.'),
+          RegExp('$negativeLookbehind\\.${_escapeRegex(orgTld)}\\.'),
+          '.{{org_tld}}.',
+        ),
+        // 문장 시작 또는 단어 경계에서 시작하는 경우 (예: kr.something)
+        ReplacementPattern(
+          RegExp('(?<![a-zA-Z])${_escapeRegex(orgTld)}\\.(?![a-zA-Z]*\\.kr)'),
           '{{org_tld}}.',
         ),
         // im- 패턴 (하이픈 뒤)
@@ -325,10 +355,10 @@ class TemplateConverter {
           RegExp('\\b${_escapeRegex(orgTld)}-'),
           '{{org_tld}}-',
         ),
-        // im 패턴 (단독, 단어 경계)
+        // im 패턴 (단독, 단어 경계) - 정부 도메인 패턴 제외
         ReplacementPattern(
-          RegExp('\\b${_escapeRegex(orgTld)}\\b'),
-          '{{org_tld}}',
+          RegExp('$negativeLookbehind\\.${_escapeRegex(orgTld)}\\b'),
+          '.{{org_tld}}',
         ),
       ]);
     }
@@ -1140,12 +1170,13 @@ class TemplateConverter {
         ),
       );
 
-      // DEPLOYMENT_BUCKET 환경변수 (7자리 랜덤 ID 포함)
+      // DEPLOYMENT_BUCKET 환경변수 (6-7자리 랜덤 ID 포함)
       // blueprint-deployment-4546499 → {{project_name.paramCase()}}-deployment-{{randomawsid}}
+      // petmedi-deployment-553867 → {{project_name.paramCase()}}-deployment-{{randomawsid}}
       patterns.add(
         ReplacementPattern(
           RegExp(
-            'DEPLOYMENT_BUCKET:\\s*${_escapeRegex(baseSnake)}-deployment-\\d{7}\\b',
+            'DEPLOYMENT_BUCKET:\\s*${_escapeRegex(baseSnake)}-deployment-\\d{6,7}\\b',
           ),
           'DEPLOYMENT_BUCKET: {{project_name.paramCase()}}-deployment-{{randomawsid}}',
         ),
@@ -1153,7 +1184,7 @@ class TemplateConverter {
       patterns.add(
         ReplacementPattern(
           RegExp(
-            'DEPLOYMENT_BUCKET:\\s*${_escapeRegex(baseParam)}-deployment-\\d{7}\\b',
+            'DEPLOYMENT_BUCKET:\\s*${_escapeRegex(baseParam)}-deployment-\\d{6,7}\\b',
           ),
           'DEPLOYMENT_BUCKET: {{project_name.paramCase()}}-deployment-{{randomawsid}}',
         ),
@@ -1184,6 +1215,96 @@ class TemplateConverter {
           ),
         );
       }
+
+      // GitHub Actions - backend/project_server 관련 다양한 패턴
+      // mkdir -p backend/petmedi_server/deploy/aws/scripts
+      // tar -xzf ... -C backend/petmedi_server/deploy/aws/scripts
+      // chmod +x backend/petmedi_server/deploy/aws/scripts/*
+      // ls -la backend/petmedi_server/deploy/aws/scripts/
+      for (final suffix in ['_server', '_client']) {
+        // backend/project_server/deploy 경로 패턴
+        patterns.add(
+          ReplacementPattern(
+            RegExp('backend/${_escapeRegex(baseSnake)}$suffix/deploy'),
+            'backend/{{project_name.snakeCase()}}$suffix/deploy',
+          ),
+        );
+
+        // backend/project_server/pubspec.yaml 패턴
+        patterns.add(
+          ReplacementPattern(
+            RegExp('backend/${_escapeRegex(baseSnake)}$suffix/pubspec\\.yaml'),
+            'backend/{{project_name.snakeCase()}}$suffix/pubspec.yaml',
+          ),
+        );
+
+        // echo/주석에서 backend/project_server 언급 패턴
+        patterns.add(
+          ReplacementPattern(
+            RegExp('backend/${_escapeRegex(baseSnake)}$suffix(?=/|\\s|\$)'),
+            'backend/{{project_name.snakeCase()}}$suffix',
+          ),
+        );
+      }
+
+      // GitHub Actions step name 패턴
+      // - name: 🔧 backend/petmedi_server 패키지 설정
+      for (final suffix in ['_server', '_client']) {
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              'name:\\s*🔧\\s*backend/${_escapeRegex(baseSnake)}$suffix',
+            ),
+            'name: 🔧 backend/{{project_name.snakeCase()}}$suffix',
+          ),
+        );
+      }
+
+      // AWS Deploy 스크립트 - EC2 내부 경로 패턴
+      // /home/ec2-user/serverpod/active/backend/petmedi_server
+      // /home/ec2-user/serverpod/upload/backend/petmedi_server
+      // $WORKDIR/serverpod/active/backend/petmedi_server
+      for (final pathType in ['active', 'upload']) {
+        // 절대 경로 형태
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              '/home/ec2-user/serverpod/$pathType/backend/'
+              '${_escapeRegex(baseSnake)}_server',
+            ),
+            '/home/ec2-user/serverpod/$pathType/backend/'
+            '{{project_name.snakeCase()}}_server',
+          ),
+        );
+        // 환경변수 형태 ($WORKDIR)
+        patterns.add(
+          ReplacementPattern(
+            RegExp(
+              r'\$WORKDIR/serverpod/' +
+                  '$pathType/backend/${_escapeRegex(baseSnake)}_server',
+            ),
+            r'$WORKDIR/serverpod/' +
+                '$pathType/backend/{{project_name.snakeCase()}}_server',
+          ),
+        );
+      }
+
+      // AWS Deploy 스크립트 - 로그 메시지 패턴
+      // log "🚀 Starting Petmedi Serverpod Server..."
+      // → log "🚀 Starting {{project_name.titleCase()}} Serverpod Server..."
+      patterns.add(
+        ReplacementPattern(
+          RegExp('Starting ${_escapeRegex(baseTitle)} Serverpod Server'),
+          'Starting {{project_name.titleCase()}} Serverpod Server',
+        ),
+      );
+      // PascalCase 형태도 처리 (Good_Teacher → GoodTeacher)
+      patterns.add(
+        ReplacementPattern(
+          RegExp('Starting ${_escapeRegex(basePascal)} Serverpod Server'),
+          'Starting {{project_name.titleCase()}} Serverpod Server',
+        ),
+      );
 
       // URL 경로 패턴 (https://.../.well-known/)
       // https://blueprint.im/.well-known/ → https://{{project_name.paramCase()}}.{{org_tld}}/.well-known/
@@ -2878,6 +2999,28 @@ class TemplateConverter {
               );
             }
 
+            // Shell 스크립트 PROJECT_BASE 패턴 (최우선 - case문 내부에서 사용)
+            // PROJECT_BASE="petmedi-s33f" → PROJECT_BASE="{{project_name.paramCase()}}-{{randomprojectid}}"
+            patterns.add(
+              ReplacementPattern(
+                RegExp(
+                  'PROJECT_BASE="${_escapeRegex(projectParam)}-${_escapeRegex(randomId)}"',
+                ),
+                'PROJECT_BASE="{{project_name.paramCase()}}-{{randomprojectid}}"',
+              ),
+            );
+            // console/widgetbook suffix 버전
+            for (final suffix in ['console', 'widgetbook']) {
+              patterns.add(
+                ReplacementPattern(
+                  RegExp(
+                    'PROJECT_BASE="${_escapeRegex(projectParam)}-$suffix-${_escapeRegex(randomId)}"',
+                  ),
+                  'PROJECT_BASE="{{project_name.paramCase()}}-$suffix-{{randomprojectid}}"',
+                ),
+              );
+            }
+
             // projectName-randomId 패턴 (기본)
             patterns.addAll([
               ReplacementPattern(
@@ -3306,6 +3449,7 @@ class TemplateConverter {
 
     // Terraform firebase_project_ids 맵 값 패턴
     // "production"  = "blueprint-k9rm"
+    // 참고: 캡처 그룹을 사용하여 원본 공백을 유지
     for (final projectName in projectNames) {
       final projectParam = projectName.replaceAll('_', '-');
 
@@ -3315,9 +3459,9 @@ class TemplateConverter {
           patterns.add(
             ReplacementPattern(
               RegExp(
-                '=\\s*"${_escapeRegex(projectParam)}-${_escapeRegex(randomId)}$suffix"',
+                '(=\\s*)"${_escapeRegex(projectParam)}-${_escapeRegex(randomId)}$suffix"',
               ),
-              '= "{{project_name.paramCase()}}-{{randomprojectid}}$suffix"',
+              r'$1"{{project_name.paramCase()}}-{{randomprojectid}}' '$suffix"',
             ),
           );
         }
@@ -3993,6 +4137,65 @@ class TemplateConverter {
         ReplacementPattern(
           RegExp(r'# API domain$', multiLine: true),
           '# API domain: https://api.{{subdomain.pascalCase()}}.{{tld}}',
+        ),
+      );
+
+      // Storage CORS 주석 패턴 (subdomain 기반 - petmedi 등에서 사용)
+      // subdomain이 orgName과 다른 경우를 위해 별도 패턴 추가
+      final subdomainPascal =
+          subdomain[0].toUpperCase() + subdomain.substring(1);
+      final escapedTld = _escapeRegex(tld);
+
+      // # production: https://Petmedi.kr → # production: https://{{subdomain.pascalCase()}}.{{tld}}
+      patterns.add(
+        ReplacementPattern(
+          RegExp('# production: https://$subdomainPascal\\.$escapedTld'),
+          '# production: https://{{subdomain.pascalCase()}}.{{tld}}',
+        ),
+      );
+
+      // # subdomains: https://*.Petmedi.kr → # subdomains: https://*.{{subdomain.pascalCase()}}.{{tld}}
+      patterns.add(
+        ReplacementPattern(
+          RegExp('# subdomains: https://\\*\\.$subdomainPascal\\.$escapedTld'),
+          '# subdomains: https://*.{{subdomain.pascalCase()}}.{{tld}}',
+        ),
+      );
+
+      // # API domain: https://api.Petmedi.kr → # API domain: https://api.{{subdomain.pascalCase()}}.{{tld}}
+      patterns.add(
+        ReplacementPattern(
+          RegExp('# API domain: https://api\\.$subdomainPascal\\.$escapedTld'),
+          '# API domain: https://api.{{subdomain.pascalCase()}}.{{tld}}',
+        ),
+      );
+
+      // Storage CORS 주석 패턴 (subdomain 소문자 버전 - petmedi.kr 형식)
+      // # production: https://petmedi.kr → # production: https://{{subdomain}}.{{tld}}
+      patterns.add(
+        ReplacementPattern(
+          RegExp('# production: https://${_escapeRegex(subdomain)}\\.$escapedTld'),
+          '# production: https://{{subdomain}}.{{tld}}',
+        ),
+      );
+
+      // # subdomains: https://*.petmedi.kr → # subdomains: https://*.{{subdomain}}.{{tld}}
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            '# subdomains: https://\\*\\.${_escapeRegex(subdomain)}\\.$escapedTld',
+          ),
+          '# subdomains: https://*.{{subdomain}}.{{tld}}',
+        ),
+      );
+
+      // # API domain: https://api.petmedi.kr → # API domain: https://api.{{subdomain}}.{{tld}}
+      patterns.add(
+        ReplacementPattern(
+          RegExp(
+            '# API domain: https://api\\.${_escapeRegex(subdomain)}\\.$escapedTld',
+          ),
+          '# API domain: https://api.{{subdomain}}.{{tld}}',
         ),
       );
     }

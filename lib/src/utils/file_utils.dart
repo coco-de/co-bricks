@@ -485,6 +485,13 @@ class FileUtils {
     'pubspec.yaml',
     'CMakeLists.txt',
     'apple-app-site-association',
+    // AWS deploy scripts (확장자 없는 셸 스크립트)
+    'run_serverpod',
+    'install_dependencies',
+    'start_server',
+    'stop_server',
+    'deploy_server',
+    'setup_database',
   ];
 
   /// 파일을 처리해야 하는지 확인
