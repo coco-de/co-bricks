@@ -95,6 +95,9 @@ class TemplateConverter {
     // 5. URL Scheme 패턴
     patterns.addAll(_buildUrlSchemePatterns(projectNames));
 
+    // 5.5. Shell 함수명 패턴 (setup_petmedi_branch → setup_{{project_name.snakeCase()}}_branch)
+    patterns.addAll(_buildShellFunctionPatterns(projectNames));
+
     // 6. 프로젝트명 패턴
     patterns.addAll(_buildProjectPatterns(projectNames, orgNames, orgTlds));
 
@@ -3620,6 +3623,84 @@ class TemplateConverter {
         ReplacementPattern(
           RegExp('\\bprod${_escapeRegex(projectName)}\\b'),
           'prod{{project_name.snakeCase()}}',
+        ),
+      ]);
+    }
+
+    return patterns;
+  }
+
+  /// Shell 함수명 패턴 생성
+  ///
+  /// 쉘 스크립트에서 프로젝트명이 포함된 함수명을 템플릿 변수로 변환
+  /// 예: setup_petmedi_branch() → setup_{{project_name.snakeCase()}}_branch()
+  static List<ReplacementPattern> _buildShellFunctionPatterns(
+    List<String> projectNames,
+  ) {
+    final patterns = <ReplacementPattern>[];
+
+    for (final projectName in projectNames) {
+      // snake_case 프로젝트명 (good_teacher)
+      final projectSnake = projectName;
+
+      // 함수 정의 패턴: setup_projectname_branch() {
+      patterns.add(
+        ReplacementPattern(
+          RegExp('setup_${_escapeRegex(projectSnake)}_branch\\(\\)'),
+          r'setup_{{project_name.snakeCase()}}_branch()',
+        ),
+      );
+
+      // 함수 호출 패턴: setup_projectname_branch (괄호 없이)
+      patterns.add(
+        ReplacementPattern(
+          RegExp('\\bsetup_${_escapeRegex(projectSnake)}_branch\\b'),
+          r'setup_{{project_name.snakeCase()}}_branch',
+        ),
+      );
+
+      // 일반적인 패턴: prefix_projectname_suffix 형태의 함수명
+      // 예: init_petmedi_config, deploy_petmedi_server 등
+      patterns.addAll([
+        ReplacementPattern(
+          RegExp('\\binit_${_escapeRegex(projectSnake)}_'),
+          r'init_{{project_name.snakeCase()}}_',
+        ),
+        ReplacementPattern(
+          RegExp('\\bdeploy_${_escapeRegex(projectSnake)}_'),
+          r'deploy_{{project_name.snakeCase()}}_',
+        ),
+        ReplacementPattern(
+          RegExp('\\bstart_${_escapeRegex(projectSnake)}_'),
+          r'start_{{project_name.snakeCase()}}_',
+        ),
+        ReplacementPattern(
+          RegExp('\\bstop_${_escapeRegex(projectSnake)}_'),
+          r'stop_{{project_name.snakeCase()}}_',
+        ),
+        ReplacementPattern(
+          RegExp('\\brun_${_escapeRegex(projectSnake)}_'),
+          r'run_{{project_name.snakeCase()}}_',
+        ),
+        ReplacementPattern(
+          RegExp('\\bbuild_${_escapeRegex(projectSnake)}_'),
+          r'build_{{project_name.snakeCase()}}_',
+        ),
+        ReplacementPattern(
+          RegExp('\\btest_${_escapeRegex(projectSnake)}_'),
+          r'test_{{project_name.snakeCase()}}_',
+        ),
+        ReplacementPattern(
+          RegExp('\\bclean_${_escapeRegex(projectSnake)}_'),
+          r'clean_{{project_name.snakeCase()}}_',
+        ),
+        ReplacementPattern(
+          RegExp('\\binstall_${_escapeRegex(projectSnake)}_'),
+          r'install_{{project_name.snakeCase()}}_',
+        ),
+        ReplacementPattern(
+          RegExp('\\bconfig_${_escapeRegex(projectSnake)}_'),
+          r'config_{{project_name.snakeCase()}}_',
         ),
       ]);
     }
