@@ -12,6 +12,7 @@ class FileUtils {
     'node_modules',
     'Pods',
     '.git',
+    'coui', // git 서브모듈로 관리되는 패키지
   ];
 
   /// 제외할 파일 패턴 (파일명 기반)
